@@ -3,10 +3,7 @@ import {
   SYSTEM_INSTRUCTION, 
   SCENE_ANALYSIS_INSTRUCTION, 
   CHARACTER_EXTRACTION_INSTRUCTION,
-  PROMPT_PREFIX,
-  BACKGROUND_LOCK,
-  MASTER_STYLE_BLOCK,
-  MASTER_NEGATIVE_BLOCK
+  MASTER_STYLE_BLOCK
 } from "../constants";
 import { GenerationSettings, OutputItem, ApiKey, SceneDefinition, Character } from "../types";
 
@@ -341,14 +338,12 @@ Generate specific cuts for this scene.
 Global Cut Range: ${globalBatchStart} to ${globalBatchEnd}.
 Total cuts for this scene: ${scene.estimatedCuts}.
 
-[WHISK OPTIMIZATION REQUIRED]
-STRICTLY FOLLOW THIS ORDER FOR PROMPTS:
-1) Event Description (Start with: "${PROMPT_PREFIX}")
-2) Character DNA (Use Bullet points: "- [Name]: ...")
-3) Camera Direction
-4) Background Authenticity ("${BACKGROUND_LOCK}")
-5) Style Finish ("${MASTER_STYLE_BLOCK}")
-6) Negative Rules ("${MASTER_NEGATIVE_BLOCK}")
+[STRICT TEMPLATE EXECUTION]
+You are a rule executor, not a writer.
+Generate the "prompt" for each cut by filling the fixed Whisk Template defined in the System Instruction.
+- Apply the Camera Composition rules strictly based on the action context.
+- Ensure the Character Anchor details are accurate to the extracted DNA.
+- End with the exact Style Block: "${MASTER_STYLE_BLOCK}"
 
 * Ensure strictly ${batchEndLocal - batchStartLocal + 1} cuts are generated.
 * Summary: Korean, abstract emotion/action.

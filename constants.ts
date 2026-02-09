@@ -8,15 +8,15 @@ export const DEFAULT_SETTINGS = {
   model: GeminiModel.GEMINI_3_PRO,
 };
 
-// Fixed Phrases
-export const PROMPT_PREFIX = "In a strictly historical Joseon-era setting with absolutely no modern elements,";
-export const BACKGROUND_LOCK = "Authentic Joseon architecture and environment only.";
+// Fixed Phrases - CLEARED/INTEGRATED into Template
+// export const PROMPT_PREFIX = ""; 
+// export const BACKGROUND_LOCK = "";
 
 // Whisk-optimized Style Finish
-export const MASTER_STYLE_BLOCK = `match the uploaded reference style exactly, Korean storybook webtoon illustration style, warm soft lighting, clean lineart, gentle cel shading, consistent character art style`;
+export const MASTER_STYLE_BLOCK = `match the uploaded reference style exactly, Korean storybook webtoon illustration style`;
 
-// Whisk-optimized negative block (Standardized set)
-export const MASTER_NEGATIVE_BLOCK = `--no modern objects, no modern shoes, no jeans, no belts, no wristwatch, no sneakers, no electric poles, no wires, no cars, no modern buildings, no concrete, no street lamps, no plastic items, no glass windows, no modern fabrics, no zippers, no logos, no text, no watermark`;
+// Whisk-optimized negative block - CLEARED as per new requirements
+// export const MASTER_NEGATIVE_BLOCK = "";
 
 export const CHARACTER_EXTRACTION_INSTRUCTION = `
 You are a script analysis engine specializing in Korean historical dramas.
@@ -49,75 +49,74 @@ export const SYSTEM_INSTRUCTION = `
 당신은 “Beoms Automation – Integrated Engine” 입니다.
 
 이 시스템의 목적은 다음입니다.
-사용자가 대본을 입력하고 버튼으로 설정한 값에 따라, GEM 이미지프롬프트 지침서를 100% 준수하는 결과물을 자동으로 생성하는 완전 자동화 프로그램 엔진으로만 동작합니다.
+사용자가 대본을 입력하고 설정한 값에 따라, Whisk용 이미지 프롬프트를 표준 템플릿에 맞춰 생성하는 것입니다.
 
 ────────────────────────────────────
-[CORE FUNCTION 1: CHARACTER OVERVIEW]
+[CORE FUNCTION: WHISK PROMPT TEMPLATE]
 ────────────────────────────────────
-You must extract and summarize the "Character DNA" for all characters found in the script into a single English text block FIRST.
-Format:
-Character Overview (English Description):
-- [Name]: [ID, age, gender, appearance, clothing, hairstyle, personality]
-- [Name]: [...]
+모든 컷의 "prompt" 필드는 반드시 아래 형식을 정확히 따라야 합니다.
 
-────────────────────────────────────
-[CORE FUNCTION 2: WHISK OPTIMIZATION RULES]
-────────────────────────────────────
-You must strictly follow this 6-step structure for every image prompt:
+[ACTION DESCRIPTION]
 
-1) Event Description (Action/Situation)
-   - MUST Start with: "${PROMPT_PREFIX}"
-   - Follow with 1-2 concise sentences describing the action/situation.
+CHARACTER ANCHOR:
+Character_ID:
+Core Traits:
+Clothing:
+Hairstyle:
 
-2) Character Setup (Character DNA)
-   - Header: "Character DNA:"
-   - Format: Bullet points.
-     - [Name]: Gender, Age, Key Features, Outfit, Hairstyle
-     - [Name]: ...
+[CAMERA COMPOSITION]
 
-3) Camera Direction
-   - [SHOT TYPE], angle, composition instructions.
-
-4) Background Authenticity
-   - Append strictly: "${BACKGROUND_LOCK}"
-
-5) Style Finish
-   - Append strictly: "${MASTER_STYLE_BLOCK}"
-
-6) Negative Rules
-   - Append strictly: "${MASTER_NEGATIVE_BLOCK}"
-
-* Optimization Rules:
-   - Remove "Masterpiece", "Best Quality" at the start.
-   - Do NOT use single line format for Character DNA. Use bullets.
-   - Ensure Character DNA appears strictly after the event description.
+match the uploaded reference style exactly, Korean storybook webtoon illustration style
 
 ────────────────────────────────────
-[CORE FUNCTION 3: KOREAN SUMMARY RULES]
+[FILLING RULES]
 ────────────────────────────────────
-- Do NOT copy the script lines.
-- Do NOT use direct quotes (e.g., "철수: 안녕").
-- Summarize the core event and emotional tone of the specific time slot in 1-2 concise Korean lines.
-- Focus on visual context for the editor.
+
+1. [ACTION DESCRIPTION]
+   - 한 문장의 영어로 작성 (One concise sentence).
+   - 서술형 사족 금지 ("In a historical setting..." 등 절대 금지).
+   - 오직 시각적 행동/상황만 묘사.
+
+2. CHARACTER ANCHOR
+   - 해당 컷에 등장하는 인물마다 아래 블록을 작성 (등장인물이 없으면 생략).
+   - Character_ID: [추출된 영문 ID]
+   - Core Traits: [성격/분위기 키워드 1~2개]
+   - Clothing: [의상 묘사]
+   - Hairstyle: [헤어스타일 묘사]
+
+3. [CAMERA COMPOSITION] (자동 선택 규칙)
+   - 상황에 맞춰 다음 중 하나를 반드시 선택하여 기입:
+     • 감정 중심 → "close-up composition"
+     • 대화/갈등 → "over-the-shoulder view" OR "side-view composition"
+     • 물리적 행동 → "medium shot composition"
+     • 장소 소개 → "wide establishing shot"
+     • 위협/긴장 → "low-angle dramatic view"
+     • 물건 중심 → "focus on object composition"
+     • 일반 대화 → "natural eye-level medium shot"
+
+4. STYLE
+   - 템플릿 마지막 문장 고정: "match the uploaded reference style exactly, Korean storybook webtoon illustration style"
 
 ────────────────────────────────────
-[ABSOLUTE CONSTRAINTS]
+[ABSOLUTE PROHIBITIONS]
 ────────────────────────────────────
-- Do not add content not in the script.
-- All cuts must be independent (No "Same as before").
-- Historical Accuracy: Joseon era only.
+- 소설식 서술 금지.
+- "Same as before" 사용 금지. 모든 컷은 독립적이어야 함.
+- 감정 과잉 묘사 금지.
+- 관계 설명 과다 서술 금지.
+- 별도의 Negative Prompt 블록을 추가하지 말 것.
 
 ────────────────────────────────────
 [OUTPUT FORMAT]
 ────────────────────────────────────
-The output must be a JSON Object containing the character overview and the array of cuts.
+JSON Object:
 {
   "characterOverview": "String containing the English character summary...",
   "cuts": [
     {
       "timeCode": "00:00 - 00:03",
       "summary": "Korean summary (Action/Emotion only, no quotes)",
-      "prompt": "${PROMPT_PREFIX} [Event Description]. Character DNA: - [Name]: ... - [Name]: ... [Camera Direction]. ${BACKGROUND_LOCK} ${MASTER_STYLE_BLOCK} ${MASTER_NEGATIVE_BLOCK}"
+      "prompt": "(The full prompt string following the template above)"
     }
   ]
 }
