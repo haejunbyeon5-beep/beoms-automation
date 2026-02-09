@@ -49,6 +49,10 @@ export const App: React.FC = () => {
 
   const serviceRef = useRef<GeminiService | null>(null);
 
+  // Performance Tracking
+  const [avgCutTime, setAvgCutTime] = useState<number>(3000); // Default 3s per cut
+  const lastProgressTime = useRef<number>(0);
+
   // Initialize selectedSceneIds when scenes change
   useEffect(() => {
     if (state.scenes.length > 0 && selectedSceneIds.size === 0) {
@@ -64,22 +68,42 @@ export const App: React.FC = () => {
     }
   }, [apiKeys]);
 
-  // Effect: Update Real-time Analysis
+  // Effect: Update Real-time Analysis (Revised Logic)
   useEffect(() => {
     const charCount = script.length;
-    // Heuristic: 1 cut per ~60 chars
-    const estimatedCuts = Math.max(1, Math.ceil(charCount / 60));
-    const durationSec = estimatedCuts * settings.cutIntervalSec;
-    const minutes = Math.floor(durationSec / 60);
-    const seconds = Math.floor(durationSec % 60);
-    const durationStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    const hasScenes = state.scenes.length > 0;
+    
+    // Rule 1: Only display cut count if scene analysis is complete
+    const cutCount = hasScenes ? settings.totalCuts : 0;
+    
+    // Rule 2 & 3: Estimated Time Calculation
+    let durationMs = 0;
+    
+    if (hasScenes) {
+        if (state.isGenerating) {
+            // Real-time update: Remaining cuts * current average time
+            const generatedCount = state.results.filter(Boolean).length;
+            const remaining = Math.max(0, settings.totalCuts - generatedCount);
+            durationMs = remaining * avgCutTime;
+        } else {
+            // Estimation: Total cuts * average time
+            durationMs = settings.totalCuts * avgCutTime;
+        }
+    }
+    
+    const totalSeconds = Math.ceil(durationMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const durationStr = hasScenes 
+        ? `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        : "00:00";
 
     setMetrics({
       charCount,
-      cutCount: estimatedCuts,
+      cutCount,
       duration: durationStr
     });
-  }, [script, settings.cutIntervalSec]);
+  }, [script, settings.totalCuts, state.scenes.length, state.results, state.isGenerating, avgCutTime]);
 
   // Handle Step Navigation
   const navigateToStep = (step: UiStep) => {
@@ -258,6 +282,9 @@ ${JSON.stringify(state.characters, null, 2)}
 ${characterHints}
     `.trim();
 
+    // Start timing for average calculation
+    lastProgressTime.current = Date.now();
+
     try {
       // We keep existing results to merge into
       // Make a copy to mutate safely
@@ -285,6 +312,19 @@ ${characterHints}
         settings, 
         combinedCharacterContext,
         (partialResults, partialOverview, sceneId, globalStartIndex) => {
+           // Calculate time taken for this batch
+           const now = Date.now();
+           const delta = now - lastProgressTime.current;
+           const batchSize = partialResults.length;
+           
+           if (batchSize > 0) {
+             const batchAvg = delta / batchSize;
+             // Exponential Moving Average (EMA) to adapt to recent speed
+             // Trust recent batch 20%, historical average 80%
+             setAvgCutTime(prev => (prev * 0.8) + (batchAvg * 0.2));
+           }
+           lastProgressTime.current = now;
+
            setState(prev => ({
              ...prev,
              characterOverview: partialOverview || prev.characterOverview

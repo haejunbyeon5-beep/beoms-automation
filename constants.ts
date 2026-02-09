@@ -11,6 +11,9 @@ export const DEFAULT_SETTINGS = {
 // Whisk-optimized Style Finish
 export const MASTER_STYLE_BLOCK = `match the uploaded reference style exactly, Korean storybook webtoon illustration style`;
 
+// Whisk-optimized Negative Block
+export const MASTER_NEGATIVE_BLOCK = `--no modern objects, sneakers, wires, cars, text, watermark, split screen, collage, comic panels, speech bubbles, distorted anatomy, monochrome, greyscale`;
+
 export const CHARACTER_EXTRACTION_INSTRUCTION = `
 You are a script analysis engine specializing in Korean historical dramas.
 Your task is to extract the main characters from the input script.
@@ -47,7 +50,7 @@ Your goal is to generate Whisk-optimized image prompts based on the input script
 ────────────────────────────────────
 For every cut, the "prompt" field must strictly follow this format:
 
-[Situation Description]
+[Detailed Situation Description]
 
 CHARACTER ANCHOR:
 Character_ID: [ID]
@@ -55,30 +58,35 @@ Core Traits: [Traits]
 Clothing: [Clothing]
 Hairstyle: [Hairstyle]
 
-[Camera Composition]
+[Camera Composition], [Atmosphere Keywords]
 
 ${MASTER_STYLE_BLOCK}
+
+${MASTER_NEGATIVE_BLOCK}
 
 ────────────────────────────────────
 [FILLING RULES]
 ────────────────────────────────────
 
-1. [Situation Description]
-   - Must be ONE concise English sentence.
-   - MUST include the keywords: "Joseon era" and the specific [Location].
-   - Describe visual action, situation, and atmosphere.
-   - NO flowery or novel-like descriptions (e.g. "In a strictly historical...").
+1. [Detailed Situation Description]
+   - Write a descriptive English sentence (20-40 words).
+   - MUST include: "Joseon era", [Specific Location Details], [Main Action], and [Background Elements/Secondary Characters].
+   - Focus on visual details: lighting, textures, background activity.
+   - Example: "In a humble Joseon house interior, an elderly woman angrily throws a white shroud bundle toward her dying son-in-law lying weakly on the floor, while neighbors watch anxiously in the background."
 
 2. CHARACTER ANCHOR
    - Repeat this block for EACH character visible in the cut.
    - If no character is visible, omit this block.
    - Character_ID: English ID from extracted list.
    - Core Traits: 2-3 visual/personality keywords.
-   - Clothing: Specific Joseon attire description.
-   - Hairstyle: Specific hair description.
+   - Clothing: Specific Joseon attire description (colors, fabrics).
+   - Hairstyle: Specific hair description (gat, binyeo, topknot).
 
-3. [Camera Composition]
-   - Select ONE from the following based on the scene context:
+3. [Camera Composition] & [Atmosphere Keywords]
+   - Camera: Select strictly from the list below based on context.
+   - Atmosphere: Add 2-3 keywords describing the mood (e.g., tense, sorrowful, festive, ominous, peaceful).
+   
+   Camera Options:
      • Emotion focus → "close-up composition"
      • Dialogue/Conflict → "over-the-shoulder view" OR "side-view composition"
      • Physical Action → "medium shot composition"
@@ -87,14 +95,13 @@ ${MASTER_STYLE_BLOCK}
      • Object focus → "focus on object composition"
      • General Dialogue → "natural eye-level medium shot"
 
-4. Style Block
-   - Always end with: "${MASTER_STYLE_BLOCK}"
+4. Style & Negative
+   - Always append the fixed Style Block and Negative Block provided in the template.
 
 ────────────────────────────────────
 [PROHIBITIONS]
 ────────────────────────────────────
-- Do NOT describe invisible emotions.
-- Do NOT use "Same as before".
-- Do NOT use narrative introductions.
-- Do NOT list excessive negative prompts.
+- Do NOT use "Same as before" or "As above".
+- Do NOT use abstract narrative introductions (e.g., "The scene opens with...").
+- Do NOT describe invisible internal thoughts.
 `;

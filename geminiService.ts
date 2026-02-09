@@ -339,6 +339,10 @@ Total cuts for this scene: ${scene.estimatedCuts}.
 
 [INSTRUCTION]
 Generate the "prompt" for each cut by STRICTLY filling the Whisk Template defined in the System Instruction.
+- [Detailed Situation Description] must be rich in visual details (Background, Secondary Characters, Lighting, Action).
+- [Atmosphere Keywords] must be included in the Camera/Atmosphere block.
+- [Negative Block] must be appended at the end.
+
 * Ensure strictly ${batchEndLocal - batchStartLocal + 1} cuts are generated.
 * Summary: Korean, abstract emotion/action.
 `;
