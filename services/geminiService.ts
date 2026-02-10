@@ -130,38 +130,59 @@ export class GeminiService {
     throw new Error("All retry attempts failed.");
   }
 
-  async extractCharacters(script: string, model: string): Promise<Character[]> {
-    this.abortController = new AbortController();
-    this.stopRequested = false;
-    
-    return this.executeWithRetry(async (apiKey) => {
-      const ai = new GoogleGenAI({ apiKey });
+ async extractCharacters(script: string, model: string): Promise<Character[]> {
+  this.abortController = new AbortController();
+  this.stopRequested = false;
+  
+  return this.executeWithRetry(async (apiKey) => {
+    const ai = new GoogleGenAI({ apiKey });
 
-      const prompt = `
+    const prompt = `
 SYSTEM CONTEXT:
 ${SYSTEM_INSTRUCTION}
 
 TASK:
-Extract characters with STRONG visual identifiers.
+Extract characters with strong visual identifiers.
 
 SCRIPT:
 ${script}
 `;
 
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: {
-          systemInstruction: CHARACTER_EXTRACTION_INSTRUCTION,
-          responseMimeType: "application/json"
+    const response = await ai.models.generateContent({
+      model: model,
+      contents: prompt,
+      config: {
+        systemInstruction: CHARACTER_EXTRACTION_INSTRUCTION,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            characters: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  name: { type: Type.STRING },
+                  gender: { type: Type.STRING },
+                  age: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  appearance: { type: Type.STRING }
+                },
+                required: ["id", "name", "gender", "age", "role", "appearance"]
+              }
+            }
+          }
         }
-      });
+      }
+    });
 
-      const jsonStr = cleanJsonString(response.text || "{}");
-      const parsed = JSON.parse(jsonStr);
-      return Array.isArray(parsed.characters) ? parsed.characters : [];
-    }, model);
-  }
+    const jsonStr = cleanJsonString(response.text || "{}");
+    const parsed = JSON.parse(jsonStr);
+
+    return Array.isArray(parsed.characters) ? parsed.characters : [];
+  }, model);
+}
 
   async analyzeScenes(script: string, targetScenes: number, model: string): Promise<SceneDefinition[]> {
     this.abortController = new AbortController();
