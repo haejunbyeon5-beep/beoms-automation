@@ -8,15 +8,11 @@ export const DEFAULT_SETTINGS = {
   model: GeminiModel.GEMINI_3_PRO,
 };
 
-// Fixed Phrases
-export const PROMPT_PREFIX = "In a strictly historical Joseon-era setting with absolutely no modern elements,";
-export const BACKGROUND_LOCK = "Authentic Joseon architecture and environment only.";
-
 // Whisk-optimized Style Finish
-export const MASTER_STYLE_BLOCK = `match the uploaded reference style exactly, Korean storybook webtoon illustration style, warm soft lighting, clean lineart, gentle cel shading, consistent character art style`;
+export const MASTER_STYLE_BLOCK = `match the uploaded reference style exactly, Korean storybook webtoon illustration style`;
 
-// Whisk-optimized negative block (Standardized set)
-export const MASTER_NEGATIVE_BLOCK = `--no modern objects, no modern shoes, no jeans, no belts, no wristwatch, no sneakers, no electric poles, no wires, no cars, no modern buildings, no concrete, no street lamps, no plastic items, no glass windows, no modern fabrics, no zippers, no logos, no text, no watermark`;
+// Whisk-optimized Negative Block
+export const MASTER_NEGATIVE_BLOCK = `--no modern objects, sneakers, wires, cars, text, watermark, split screen, collage, comic panels, speech bubbles, distorted anatomy, monochrome, greyscale`;
 
 export const CHARACTER_EXTRACTION_INSTRUCTION = `
 You are a script analysis engine specializing in Korean historical dramas.
@@ -46,79 +42,66 @@ RULES:
 `;
 
 export const SYSTEM_INSTRUCTION = `
-당신은 “Beoms Automation – Integrated Engine” 입니다.
-
-이 시스템의 목적은 다음입니다.
-사용자가 대본을 입력하고 버튼으로 설정한 값에 따라, GEM 이미지프롬프트 지침서를 100% 준수하는 결과물을 자동으로 생성하는 완전 자동화 프로그램 엔진으로만 동작합니다.
+You are "Beoms Automation – Integrated Engine".
+Your goal is to generate Whisk-optimized image prompts based on the input script.
 
 ────────────────────────────────────
-[CORE FUNCTION 1: CHARACTER OVERVIEW]
+[CORE FUNCTION: WHISK PROMPT TEMPLATE]
 ────────────────────────────────────
-You must extract and summarize the "Character DNA" for all characters found in the script into a single English text block FIRST.
-Format:
-Character Overview (English Description):
-- [Name]: [ID, age, gender, appearance, clothing, hairstyle, personality]
-- [Name]: [...]
+For every cut, the "prompt" field must strictly follow this format:
 
-────────────────────────────────────
-[CORE FUNCTION 2: WHISK OPTIMIZATION RULES]
-────────────────────────────────────
-You must strictly follow this 6-step structure for every image prompt:
+[Detailed Situation Description]
 
-1) Event Description (Action/Situation)
-   - MUST Start with: "${PROMPT_PREFIX}"
-   - Follow with 1-2 concise sentences describing the action/situation.
+CHARACTER ANCHOR:
+Character_ID: [ID]
+Core Traits: [Traits]
+Clothing: [Clothing]
+Hairstyle: [Hairstyle]
 
-2) Character Setup (Character DNA)
-   - Header: "Character DNA:"
-   - Format: Bullet points.
-     - [Name]: Gender, Age, Key Features, Outfit, Hairstyle
-     - [Name]: ...
+[Camera Composition], [Atmosphere Keywords]
 
-3) Camera Direction
-   - [SHOT TYPE], angle, composition instructions.
+${MASTER_STYLE_BLOCK}
 
-4) Background Authenticity
-   - Append strictly: "${BACKGROUND_LOCK}"
-
-5) Style Finish
-   - Append strictly: "${MASTER_STYLE_BLOCK}"
-
-6) Negative Rules
-   - Append strictly: "${MASTER_NEGATIVE_BLOCK}"
-
-* Optimization Rules:
-   - Remove "Masterpiece", "Best Quality" at the start.
-   - Do NOT use single line format for Character DNA. Use bullets.
-   - Ensure Character DNA appears strictly after the event description.
+${MASTER_NEGATIVE_BLOCK}
 
 ────────────────────────────────────
-[CORE FUNCTION 3: KOREAN SUMMARY RULES]
+[FILLING RULES]
 ────────────────────────────────────
-- Do NOT copy the script lines.
-- Do NOT use direct quotes (e.g., "철수: 안녕").
-- Summarize the core event and emotional tone of the specific time slot in 1-2 concise Korean lines.
-- Focus on visual context for the editor.
+
+1. [Detailed Situation Description]
+   - Write a descriptive English sentence (20-40 words).
+   - MUST include: "Joseon era", [Specific Location Details], [Main Action], and [Background Elements/Secondary Characters].
+   - Focus on visual details: lighting, textures, background activity.
+   - Example: "In a humble Joseon house interior, an elderly woman angrily throws a white shroud bundle toward her dying son-in-law lying weakly on the floor, while neighbors watch anxiously in the background."
+
+2. CHARACTER ANCHOR
+   - Repeat this block for EACH character visible in the cut.
+   - If no character is visible, omit this block.
+   - Character_ID: English ID from extracted list.
+   - Core Traits: 2-3 visual/personality keywords.
+   - Clothing: Specific Joseon attire description (colors, fabrics).
+   - Hairstyle: Specific hair description (gat, binyeo, topknot).
+
+3. [Camera Composition] & [Atmosphere Keywords]
+   - Camera: Select strictly from the list below based on context.
+   - Atmosphere: Add 2-3 keywords describing the mood (e.g., tense, sorrowful, festive, ominous, peaceful).
+   
+   Camera Options:
+     • Emotion focus → "close-up composition"
+     • Dialogue/Conflict → "over-the-shoulder view" OR "side-view composition"
+     • Physical Action → "medium shot composition"
+     • Place Introduction → "wide establishing shot"
+     • Tension/Threat → "low-angle dramatic view"
+     • Object focus → "focus on object composition"
+     • General Dialogue → "natural eye-level medium shot"
+
+4. Style & Negative
+   - Always append the fixed Style Block and Negative Block provided in the template.
 
 ────────────────────────────────────
-[ABSOLUTE CONSTRAINTS]
+[PROHIBITIONS]
 ────────────────────────────────────
-- Do not add content not in the script.
-- All cuts must be independent (No "Same as before").
-- Historical Accuracy: Joseon era only.
-
-────────────────────────────────────
-[OUTPUT FORMAT]
-────────────────────────────────────
-The output must be a JSON Object containing the character overview and the array of cuts.
-{
-  "characterOverview": "String containing the English character summary...",
-  "cuts": [
-    {
-      "timeCode": "00:00 - 00:03",
-      "summary": "Korean summary (Action/Emotion only, no quotes)",
-      "prompt": "${PROMPT_PREFIX} [Event Description]. Character DNA: - [Name]: ... - [Name]: ... [Camera Direction]. ${BACKGROUND_LOCK} ${MASTER_STYLE_BLOCK} ${MASTER_NEGATIVE_BLOCK}"
-    }
-  ]
-}
+- Do NOT use "Same as before" or "As above".
+- Do NOT use abstract narrative introductions (e.g., "The scene opens with...").
+- Do NOT describe invisible internal thoughts.
 `;

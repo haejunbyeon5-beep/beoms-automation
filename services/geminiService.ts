@@ -2,11 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { 
   SYSTEM_INSTRUCTION, 
   SCENE_ANALYSIS_INSTRUCTION, 
-  CHARACTER_EXTRACTION_INSTRUCTION,
-  PROMPT_PREFIX,
-  BACKGROUND_LOCK,
-  MASTER_STYLE_BLOCK,
-  MASTER_NEGATIVE_BLOCK
+  CHARACTER_EXTRACTION_INSTRUCTION
 } from "../constants";
 import { GenerationSettings, OutputItem, ApiKey, SceneDefinition, Character } from "../types";
 
@@ -27,7 +23,13 @@ class KeyPool {
   private ptr = 0;
 
   constructor(apiKeys: ApiKey[]) {
+    this.updateKeys(apiKeys);
+  }
+
+  // Completely reset the pool with new keys, clearing all cache/cooldowns
+  updateKeys(apiKeys: ApiKey[]) {
     this.keys = apiKeys.filter(k => k.isActive).map(k => ({ key: k.key, cooldownUntil: 0 }));
+    this.ptr = 0; // Reset round-robin pointer
   }
 
   get count() { return this.keys.length; }
@@ -72,15 +74,28 @@ export class GeminiService {
     this.keyPool = new KeyPool(apiKeys);
   }
 
-  requestStop() {
-    this.stopRequested = true;
-  }
-
-  cancel() {
+  // Method to immediately update keys in the running service
+  updateApiKeys(apiKeys: ApiKey[]) {
+    this.keyPool.updateKeys(apiKeys);
+    // Force stop current requests immediately so next requests use new keys
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;
     }
+    // Also set stopRequested to break loops
+    this.stopRequested = true;
+  }
+
+  requestStop() {
+    this.stopRequested = true;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+  }
+
+  cancel() {
+    this.requestStop();
   }
 
   // Simplified execute wrapper for single calls (Analysis/Extraction)
@@ -93,7 +108,8 @@ export class GeminiService {
     const maxRetries = 3;
 
     while (attempts <= maxRetries) {
-      if (this.stopRequested) throw new Error("Operation cancelled by user.");
+      if (this.stopRequested) throw new Error("Operation cancelled by user or API key update.");
+      if (this.abortController?.signal.aborted) throw new Error("Aborted.");
 
       let apiKey = this.keyPool.getNextKey();
       
@@ -109,6 +125,8 @@ export class GeminiService {
         const result = await operation(apiKey);
         return result;
       } catch (error: any) {
+        if (this.abortController?.signal.aborted) throw new Error("Aborted.");
+        
         // Check for Quota Exceeded (429) or Resource Exhausted
         const isQuotaError = error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('quota');
         
@@ -130,6 +148,9 @@ export class GeminiService {
   }
 
   async extractCharacters(script: string, model: string): Promise<Character[]> {
+    this.abortController = new AbortController();
+    this.stopRequested = false;
+    
     return this.executeWithRetry(async (apiKey) => {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Script to analyze:\n${script}`;
@@ -168,6 +189,9 @@ export class GeminiService {
   }
 
   async analyzeScenes(script: string, targetScenes: number, model: string): Promise<SceneDefinition[]> {
+    this.abortController = new AbortController();
+    this.stopRequested = false;
+
     return this.executeWithRetry(async (apiKey) => {
       const ai = new GoogleGenAI({ apiKey });
       const prompt = `Original Script:\n${script}\n\nSplit this into exactly ${targetScenes} scenes.`;
@@ -223,9 +247,10 @@ export class GeminiService {
     scenes: SceneDefinition[],
     settings: GenerationSettings,
     characterHints: string, 
-    onProgress: (partial: OutputItem[], overview: string | null) => void,
+    onProgress: (partial: OutputItem[], overview: string | null, sceneId: number, globalStartIndex: number) => void,
     startGlobalCutIndex: number = 1,
-    onStatusUpdate?: (msg: string) => void
+    onStatusUpdate?: (msg: string) => void,
+    targetSceneIds?: number[] // Optional: If provided, only generate these scenes
   ): Promise<{ items: OutputItem[], overview: string | null }> {
     this.abortController = new AbortController();
     this.stopRequested = false;
@@ -240,13 +265,21 @@ export class GeminiService {
     const INTER_CALL_DELAY = 2000; // 2 seconds
 
     for (const scene of scenes) {
-      if (this.stopRequested) break;
+      if (this.stopRequested || this.abortController?.signal.aborted) break;
 
       const sceneStartCut = cutsGeneratedSoFar + 1;
       const sceneEndCut = cutsGeneratedSoFar + scene.estimatedCuts;
+      
+      // Determine if we should generate this scene
+      const isTargetScene = !targetSceneIds || targetSceneIds.includes(scene.id);
+      
+      // Skip logic:
+      // 1. If not a target scene, skip (but count cuts)
+      // 2. If we are in "Resume" mode (no specific targets) and this scene is before start point, skip.
+      // Note: If targetSceneIds is provided, we ignore startGlobalCutIndex and force generate targets.
+      const shouldSkipForResume = !targetSceneIds && sceneEndCut < startGlobalCutIndex;
 
-      // Skip fully processed scenes
-      if (sceneEndCut < startGlobalCutIndex) {
+      if (!isTargetScene || shouldSkipForResume) {
         cutsGeneratedSoFar += scene.estimatedCuts;
         continue;
       }
@@ -255,15 +288,15 @@ export class GeminiService {
       const batchesInScene = Math.ceil(sceneCutsNeeded / BATCH_SIZE);
 
       for (let b = 0; b < batchesInScene; b++) {
-        if (this.stopRequested) break;
+        if (this.stopRequested || this.abortController?.signal.aborted) break;
 
         const batchStartLocal = b * BATCH_SIZE + 1;
         const batchEndLocal = Math.min((b + 1) * BATCH_SIZE, sceneCutsNeeded);
         const globalBatchStart = cutsGeneratedSoFar + batchStartLocal;
         const globalBatchEnd = cutsGeneratedSoFar + batchEndLocal;
 
-        // Skip processed batches
-        if (globalBatchEnd < startGlobalCutIndex) continue;
+        // Double check resume logic for batches within a scene (only if not explicit target mode)
+        if (!targetSceneIds && globalBatchEnd < startGlobalCutIndex) continue;
 
         // --- Batch Execution ---
         if (onStatusUpdate) {
@@ -272,16 +305,13 @@ export class GeminiService {
 
         let attempts = 0;
         let batchSuccess = false;
-        // Auto-retry logic: 60s -> 120s -> 180s
-        const retryDelays = [60000, 120000, 180000];
-
+        
         while (!batchSuccess && attempts <= 3) {
-          if (this.stopRequested) break;
+          if (this.stopRequested || this.abortController?.signal.aborted) break;
 
           const apiKey = this.keyPool.getNextKey();
           
           if (!apiKey) {
-            // All keys in cooldown
             const waitTime = this.keyPool.getMinWaitTime();
             const waitSeconds = Math.ceil((waitTime || 1000) / 1000);
             if (onStatusUpdate) onStatusUpdate(`API 한도 초과 - ${waitSeconds}초 대기 중...`);
@@ -307,14 +337,11 @@ Generate specific cuts for this scene.
 Global Cut Range: ${globalBatchStart} to ${globalBatchEnd}.
 Total cuts for this scene: ${scene.estimatedCuts}.
 
-[WHISK OPTIMIZATION REQUIRED]
-STRICTLY FOLLOW THIS ORDER FOR PROMPTS:
-1) Event Description (Start with: "${PROMPT_PREFIX}")
-2) Character DNA (Use Bullet points: "- [Name]: ...")
-3) Camera Direction
-4) Background Authenticity ("${BACKGROUND_LOCK}")
-5) Style Finish ("${MASTER_STYLE_BLOCK}")
-6) Negative Rules ("${MASTER_NEGATIVE_BLOCK}")
+[INSTRUCTION]
+Generate the "prompt" for each cut by STRICTLY filling the Whisk Template defined in the System Instruction.
+- [Detailed Situation Description] must be rich in visual details (Background, Secondary Characters, Lighting, Action).
+- [Atmosphere Keywords] must be included in the Camera/Atmosphere block.
+- [Negative Block] must be appended at the end.
 
 * Ensure strictly ${batchEndLocal - batchStartLocal + 1} cuts are generated.
 * Summary: Korean, abstract emotion/action.
@@ -348,39 +375,38 @@ STRICTLY FOLLOW THIS ORDER FOR PROMPTS:
               }
             });
 
+            if (this.stopRequested || this.abortController?.signal.aborted) break;
+
             const jsonStr = cleanJsonString(response.text || "{}");
             const parsed = JSON.parse(jsonStr);
 
             if (parsed && parsed.cuts && parsed.cuts.length > 0) {
-              allResults = [...allResults, ...parsed.cuts];
+              const newCuts = parsed.cuts;
+              allResults = [...allResults, ...newCuts];
+              
               if (!globalOverview && parsed.characterOverview) {
                 globalOverview = parsed.characterOverview;
               }
-              onProgress(allResults, globalOverview);
-              batchSuccess = true;
               
-              // Rate Limit Protection 1: 2s delay between calls
+              // Pass context: Which scene, and where in the global timeline these cuts start
+              // Note: globalBatchStart is 1-based, array index is 0-based.
+              onProgress(newCuts, globalOverview, scene.id, globalBatchStart - 1);
+              
+              batchSuccess = true;
               await delay(INTER_CALL_DELAY);
             } else {
                throw new Error("Empty result for scene batch");
             }
 
           } catch (error: any) {
+            if (this.abortController?.signal.aborted) {
+               break; // Stop loop on abort
+            }
             const isQuota = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('403');
             
             if (isQuota) {
               console.warn(`Key rate limited during generate: ${apiKey.slice(-4)}`);
-              // Mark this key as bad for 60s
               this.keyPool.markCooldown(apiKey, 60000);
-              
-              // If we have other keys, loop will pick them next.
-              // If NO keys left (getNextKey returns null next iter), we wait.
-              
-              // If this was the last key, we increment attempt count to force a long wait logic?
-              // Actually, keyPool handles wait. But we want to enforce the 60/120/180 rule logic if ALL fail.
-              // We'll let the while loop continue. If next iteration gets no key, it waits.
-              
-              // If we cycled through all keys and still failed, we might need a hard wait.
               if (onStatusUpdate) onStatusUpdate(`API 키 한도 도달 (${apiKey.slice(-4)}). 전환 중...`);
             } else {
               console.error(`Batch error:`, error);
@@ -394,14 +420,13 @@ STRICTLY FOLLOW THIS ORDER FOR PROMPTS:
           }
         }
 
-        if (!batchSuccess && !this.stopRequested) {
+        if (!batchSuccess && !this.stopRequested && !this.abortController?.signal.aborted) {
            throw new Error(`Critical failure at Scene ${scene.id}, Batch ${b+1}. Stopping.`);
         }
 
-        // Rate Limit Protection 2: Wait 30s between batches if job is large
-        // Only if there is a next batch/scene
         const hasMoreCuts = globalBatchEnd < settings.totalCuts;
         if (hasMoreCuts && batchSuccess && !this.stopRequested) {
+           // Wait less for selective generation to feel snappier? No, safety first.
            if (onStatusUpdate) onStatusUpdate(`안전 배치를 위해 30초 대기 중...`);
            await delay(INTER_BATCH_DELAY);
         }
