@@ -1,440 +1,89 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { 
-  SYSTEM_INSTRUCTION, 
-  SCENE_ANALYSIS_INSTRUCTION, 
-  CHARACTER_EXTRACTION_INSTRUCTION
-} from "../constants";
-import { GenerationSettings, OutputItem, ApiKey, SceneDefinition, Character } from "../types";
+import { GoogleGenAI, Part, Type } from "@google/genai";
+import { Character, AspectRatio, ImageQuality } from "../types";
 
-function cleanJsonString(text: string): string {
-  let cleaned = text.trim();
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```\s*/, '').replace(/\s*```$/, '');
-  }
-  return cleaned;
-}
+// [보안] 키 설정 우선 적용
+const getApiKey = () => localStorage.getItem('my_gemini_key') || (process.env.API_KEY as string);
+const getAI = () => new GoogleGenAI({ apiKey: getApiKey() });
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// [STYLE] 조선시대 시네마틱 고정 스타일 블록
+const MASTER_STYLE_BLOCK = "(Masterpiece:1.3), (best quality:1.3), (High-quality modern webtoon style illustration:1.4), semi-realistic anime influence, East Asian facial structure true to Joseon-era, dramatic cinematic lighting, atmospheric Joseon setting";
 
-class KeyPool {
-  private keys: { key: string; cooldownUntil: number }[] = [];
-  private ptr = 0;
+export const generateCharacterProfileImage = async (name: string, description: string, stylePreset: string, customStyle: string, quality: ImageQuality = 'standard'): Promise<string | undefined> => {
+  const ai = getAI();
+  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const prompt = `A professional profile of "${name}". Style: ${stylePreset}. Atmosphere: ${MASTER_STYLE_BLOCK}. DNA: Joseon-era clothing, Sangtu or traditional hair, ${description}. 1:1 ratio.`;
+  const response = await ai.models.generateContent({ model, contents: { parts: [{ text: prompt }] }, config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } } });
+  
+  const part = response.candidates?.[0]?.content?.parts?.[0];
+  if (part?.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+  return undefined;
+};
 
-  constructor(apiKeys: ApiKey[]) {
-    this.updateKeys(apiKeys);
-  }
-
-  // Completely reset the pool with new keys, clearing all cache/cooldowns
-  updateKeys(apiKeys: ApiKey[]) {
-    this.keys = apiKeys.filter(k => k.isActive).map(k => ({ key: k.key, cooldownUntil: 0 }));
-    this.ptr = 0; // Reset round-robin pointer
-  }
-
-  get count() { return this.keys.length; }
-
-  // Get next available key. If all are cooling down, return null.
-  getNextKey(): string | null {
-    if (this.keys.length === 0) return null;
-    const now = Date.now();
-    for (let i = 0; i < this.keys.length; i++) {
-      const idx = (this.ptr + i) % this.keys.length;
-      if (this.keys[idx].cooldownUntil <= now) {
-        this.ptr = (idx + 1) % this.keys.length; // Rotate for next use
-        return this.keys[idx].key;
-      }
-    }
-    return null;
-  }
-
-  markCooldown(key: string, durationMs: number) {
-    const entry = this.keys.find(k => k.key === key);
-    if (entry) {
-      entry.cooldownUntil = Date.now() + durationMs;
-    }
-  }
-
-  // If no key is available, find the shortest wait time
-  getMinWaitTime(): number {
-    if (this.keys.length === 0) return 0;
-    const now = Date.now();
-    const waits = this.keys.map(k => k.cooldownUntil - now).filter(w => w > 0);
-    if (waits.length === 0) return 0; // Should be available
-    return Math.min(...waits);
-  }
-}
-
-export class GeminiService {
-  private abortController: AbortController | null = null;
-  private stopRequested: boolean = false;
-  private keyPool: KeyPool;
-
-  constructor(private apiKeys: ApiKey[]) {
-    this.keyPool = new KeyPool(apiKeys);
-  }
-
-  // Method to immediately update keys in the running service
-  updateApiKeys(apiKeys: ApiKey[]) {
-    this.keyPool.updateKeys(apiKeys);
-    // Force stop current requests immediately so next requests use new keys
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-    // Also set stopRequested to break loops
-    this.stopRequested = true;
-  }
-
-  requestStop() {
-    this.stopRequested = true;
-    if (this.abortController) {
-      this.abortController.abort();
-      this.abortController = null;
-    }
-  }
-
-  cancel() {
-    this.requestStop();
-  }
-
-  // Simplified execute wrapper for single calls (Analysis/Extraction)
-  private async executeWithRetry<T>(
-    operation: (apiKey: string) => Promise<T>,
-    model: string,
-    onStatusUpdate?: (msg: string) => void
-  ): Promise<T> {
-    let attempts = 0;
-    const maxRetries = 3;
-
-    while (attempts <= maxRetries) {
-      if (this.stopRequested) throw new Error("Operation cancelled by user or API key update.");
-      if (this.abortController?.signal.aborted) throw new Error("Aborted.");
-
-      let apiKey = this.keyPool.getNextKey();
-      
-      // If no key available, wait
-      if (!apiKey) {
-        const waitTime = this.keyPool.getMinWaitTime() || 1000;
-        if (onStatusUpdate) onStatusUpdate(`모든 API 키 사용 중... ${Math.ceil(waitTime/1000)}초 대기`);
-        await delay(waitTime + 100);
-        continue;
-      }
-
-      try {
-        const result = await operation(apiKey);
-        return result;
-      } catch (error: any) {
-        if (this.abortController?.signal.aborted) throw new Error("Aborted.");
-        
-        // Check for Quota Exceeded (429) or Resource Exhausted
-        const isQuotaError = error.message?.includes('429') || error.message?.includes('403') || error.message?.includes('quota');
-        
-        if (isQuotaError) {
-           console.warn(`Key rate limited: ${apiKey.slice(-4)}`);
-           this.keyPool.markCooldown(apiKey, 60000); // 1 minute cooldown for this key
-           // Do not increment global attempts heavily if we just switched keys
-           // But if we ran out of keys, we wait.
-        } else {
-           attempts++;
-        }
-
-        if (attempts > maxRetries) throw error;
-        
-        await delay(1000 * attempts); // Basic backoff
-      }
-    }
-    throw new Error("All retry attempts failed.");
-  }
-
-  async extractCharacters(script: string, model: string): Promise<Character[]> {
-    this.abortController = new AbortController();
-    this.stopRequested = false;
-    
-    return this.executeWithRetry(async (apiKey) => {
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Script to analyze:\n${script}`;
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: {
-          systemInstruction: CHARACTER_EXTRACTION_INSTRUCTION,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              characters: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.STRING },
-                    name: { type: Type.STRING },
-                    gender: { type: Type.STRING },
-                    age: { type: Type.STRING },
-                    role: { type: Type.STRING },
-                    appearance: { type: Type.STRING },
-                  },
-                  required: ["id", "name", "gender", "age", "role", "appearance"]
-                }
-              }
-            }
-          }
-        }
-      });
-      const jsonStr = cleanJsonString(response.text || "{}");
-      const parsed = JSON.parse(jsonStr);
-      return Array.isArray(parsed.characters) ? parsed.characters : [];
-    }, model);
-  }
-
-  async analyzeScenes(script: string, targetScenes: number, model: string): Promise<SceneDefinition[]> {
-    this.abortController = new AbortController();
-    this.stopRequested = false;
-
-    return this.executeWithRetry(async (apiKey) => {
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Original Script:\n${script}\n\nSplit this into exactly ${targetScenes} scenes.`;
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: {
-          systemInstruction: SCENE_ANALYSIS_INSTRUCTION,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              scenes: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.INTEGER },
-                    title: { type: Type.STRING },
-                    summary: { type: Type.STRING },
-                    content: { type: Type.STRING },
-                  },
-                  required: ["id", "title", "summary", "content"]
-                }
-              }
-            }
-          }
-        }
-      });
-      const jsonStr = cleanJsonString(response.text || "{}");
-      const parsed = JSON.parse(jsonStr);
-      if (!parsed.scenes || !Array.isArray(parsed.scenes)) throw new Error("Invalid scene analysis response");
-      return parsed.scenes.map((s: any) => ({
-        ...s,
-        characterCount: s.content ? s.content.length : 0,
-        estimatedCuts: 0
-      }));
-    }, model);
-  }
-
-  async testConnection(apiKey: string, model: string): Promise<boolean> {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      await ai.models.generateContent({ model: model, contents: "Test" });
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // --- Main Generation Logic with Rate Limiting & Batching ---
-  async generate(
-    scenes: SceneDefinition[],
-    settings: GenerationSettings,
-    characterHints: string, 
-    onProgress: (partial: OutputItem[], overview: string | null, sceneId: number, globalStartIndex: number) => void,
-    startGlobalCutIndex: number = 1,
-    onStatusUpdate?: (msg: string) => void,
-    targetSceneIds?: number[] // Optional: If provided, only generate these scenes
-  ): Promise<{ items: OutputItem[], overview: string | null }> {
-    this.abortController = new AbortController();
-    this.stopRequested = false;
-    
-    let allResults: OutputItem[] = [];
-    let globalOverview: string | null = null;
-    let cutsGeneratedSoFar = 0;
-
-    // Rate Limit Config
-    const BATCH_SIZE = 20; // Split into 20-25 cut units
-    const INTER_BATCH_DELAY = 30000; // 30 seconds
-    const INTER_CALL_DELAY = 2000; // 2 seconds
-
-    for (const scene of scenes) {
-      if (this.stopRequested || this.abortController?.signal.aborted) break;
-
-      const sceneStartCut = cutsGeneratedSoFar + 1;
-      const sceneEndCut = cutsGeneratedSoFar + scene.estimatedCuts;
-      
-      // Determine if we should generate this scene
-      const isTargetScene = !targetSceneIds || targetSceneIds.includes(scene.id);
-      
-      // Skip logic:
-      // 1. If not a target scene, skip (but count cuts)
-      // 2. If we are in "Resume" mode (no specific targets) and this scene is before start point, skip.
-      // Note: If targetSceneIds is provided, we ignore startGlobalCutIndex and force generate targets.
-      const shouldSkipForResume = !targetSceneIds && sceneEndCut < startGlobalCutIndex;
-
-      if (!isTargetScene || shouldSkipForResume) {
-        cutsGeneratedSoFar += scene.estimatedCuts;
-        continue;
-      }
-
-      const sceneCutsNeeded = scene.estimatedCuts;
-      const batchesInScene = Math.ceil(sceneCutsNeeded / BATCH_SIZE);
-
-      for (let b = 0; b < batchesInScene; b++) {
-        if (this.stopRequested || this.abortController?.signal.aborted) break;
-
-        const batchStartLocal = b * BATCH_SIZE + 1;
-        const batchEndLocal = Math.min((b + 1) * BATCH_SIZE, sceneCutsNeeded);
-        const globalBatchStart = cutsGeneratedSoFar + batchStartLocal;
-        const globalBatchEnd = cutsGeneratedSoFar + batchEndLocal;
-
-        // Double check resume logic for batches within a scene (only if not explicit target mode)
-        if (!targetSceneIds && globalBatchEnd < startGlobalCutIndex) continue;
-
-        // --- Batch Execution ---
-        if (onStatusUpdate) {
-          onStatusUpdate(`생성 중: 씬 ${scene.id} - 배치 ${b + 1}/${batchesInScene} (컷 ${globalBatchStart}~${globalBatchEnd})`);
-        }
-
-        let attempts = 0;
-        let batchSuccess = false;
-        
-        while (!batchSuccess && attempts <= 3) {
-          if (this.stopRequested || this.abortController?.signal.aborted) break;
-
-          const apiKey = this.keyPool.getNextKey();
-          
-          if (!apiKey) {
-            const waitTime = this.keyPool.getMinWaitTime();
-            const waitSeconds = Math.ceil((waitTime || 1000) / 1000);
-            if (onStatusUpdate) onStatusUpdate(`API 한도 초과 - ${waitSeconds}초 대기 중...`);
-            await delay(waitTime || 1000);
-            continue;
-          }
-
-          try {
-            const ai = new GoogleGenAI({ apiKey });
-            const prompt = `
-[CONTEXT]
-Scene ${scene.id}: ${scene.title}
-Summary: ${scene.summary}
-
-[SCENE SCRIPT CONTENT]
-${scene.content}
-
-[AUTO-EXTRACTED CHARACTERS & MANUAL HINTS]
-${characterHints || "None provided. Extract strictly from script."}
-
-[TASK]
-Generate specific cuts for this scene.
-Global Cut Range: ${globalBatchStart} to ${globalBatchEnd}.
-Total cuts for this scene: ${scene.estimatedCuts}.
-
-[INSTRUCTION]
-Generate the "prompt" for each cut by STRICTLY filling the Whisk Template defined in the System Instruction.
-- [Detailed Situation Description] must be rich in visual details (Background, Secondary Characters, Lighting, Action).
-- [Atmosphere Keywords] must be included in the Camera/Atmosphere block.
-- [Negative Block] must be appended at the end.
-
-* Ensure strictly ${batchEndLocal - batchStartLocal + 1} cuts are generated.
-* Summary: Korean, abstract emotion/action.
-`;
-
-            const response = await ai.models.generateContent({
-              model: settings.model,
-              contents: prompt,
-              config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: Type.OBJECT,
-                  properties: {
-                    characterOverview: { type: Type.STRING, nullable: true },
-                    cuts: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          timeCode: { type: Type.STRING },
-                          summary: { type: Type.STRING },
-                          prompt: { type: Type.STRING },
-                        },
-                        required: ["timeCode", "summary", "prompt"]
-                      }
-                    }
-                  },
-                  required: ["cuts"]
-                }
-              }
-            });
-
-            if (this.stopRequested || this.abortController?.signal.aborted) break;
-
-            const jsonStr = cleanJsonString(response.text || "{}");
-            const parsed = JSON.parse(jsonStr);
-
-            if (parsed && parsed.cuts && parsed.cuts.length > 0) {
-              const newCuts = parsed.cuts;
-              allResults = [...allResults, ...newCuts];
-              
-              if (!globalOverview && parsed.characterOverview) {
-                globalOverview = parsed.characterOverview;
-              }
-              
-              // Pass context: Which scene, and where in the global timeline these cuts start
-              // Note: globalBatchStart is 1-based, array index is 0-based.
-              onProgress(newCuts, globalOverview, scene.id, globalBatchStart - 1);
-              
-              batchSuccess = true;
-              await delay(INTER_CALL_DELAY);
-            } else {
-               throw new Error("Empty result for scene batch");
-            }
-
-          } catch (error: any) {
-            if (this.abortController?.signal.aborted) {
-               break; // Stop loop on abort
-            }
-            const isQuota = error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('403');
-            
-            if (isQuota) {
-              console.warn(`Key rate limited during generate: ${apiKey.slice(-4)}`);
-              this.keyPool.markCooldown(apiKey, 60000);
-              if (onStatusUpdate) onStatusUpdate(`API 키 한도 도달 (${apiKey.slice(-4)}). 전환 중...`);
-            } else {
-              console.error(`Batch error:`, error);
-              attempts++;
-              const backoff = 2000 * attempts;
-              if (onStatusUpdate) onStatusUpdate(`오류 발생. ${backoff/1000}초 후 재시도 (${attempts}/3)...`);
-              await delay(backoff);
-            }
-
-            if (attempts > 3) throw new Error(`Batch failed after multiple retries: ${error.message}`);
-          }
-        }
-
-        if (!batchSuccess && !this.stopRequested && !this.abortController?.signal.aborted) {
-           throw new Error(`Critical failure at Scene ${scene.id}, Batch ${b+1}. Stopping.`);
-        }
-
-        const hasMoreCuts = globalBatchEnd < settings.totalCuts;
-        if (hasMoreCuts && batchSuccess && !this.stopRequested) {
-           // Wait less for selective generation to feel snappier? No, safety first.
-           if (onStatusUpdate) onStatusUpdate(`안전 배치를 위해 30초 대기 중...`);
-           await delay(INTER_BATCH_DELAY);
+export const autoSegmentScript = async (fullScript: string, targetCount: number): Promise<{ number: string, description: string }[]> => {
+  const ai = getAI();
+  const systemInstruction = `Divide script into exactly ${targetCount} scenes. CRITICAL: Start description with EXACT VERBATIM text from script. DO NOT SUMMARIZE.`;
+  const response = await ai.models.generateContent({ 
+    model: 'gemini-3-flash-preview', 
+    contents: `Script: ${fullScript}`, 
+    config: { 
+      systemInstruction, 
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            number: { type: Type.STRING },
+            description: { type: Type.STRING }
+          },
+          required: ["number", "description"]
         }
       }
+    } 
+  });
+  try { return JSON.parse(response.text || "[]"); } catch (e) { return []; }
+};
 
-      cutsGeneratedSoFar += scene.estimatedCuts;
-    }
-    
-    return { items: allResults, overview: globalOverview };
+export const optimizePrompt = async (sceneContent: string, stylePreset: string, customStyle: string, characters: Character[]): Promise<string> => {
+  const ai = getAI();
+  const charContext = characters.filter(c => c.name).map(c => `- Character "${c.name}": Joseon-era Hanbok and Sangtu(topknot) required.`).join('\n');
+  
+  const systemInstruction = `Transform scene into a professional English image prompt.
+  RULES:
+  1. FORCE DNA: Every person MUST wear "Joseon-era Hanbok" and "Sangtu".
+  2. STRUCTURE: Use [SHOT] [ACTION] [DNA] [STYLE] order.
+  3. STYLE: Always include "${MASTER_STYLE_BLOCK}" at the end.`;
+
+  const response = await ai.models.generateContent({ 
+    model: 'gemini-3-flash-preview', 
+    contents: `Scene: ${sceneContent}\nChars:\n${charContext}`, 
+    config: { systemInstruction } 
+  });
+  return response.text?.trim() || sceneContent;
+};
+
+export const generateSceneImage = async (prompt: string, characters: Character[], aspectRatio: AspectRatio = "16:9", styleRef?: { data: string, mimeType: string }, quality: ImageQuality = 'standard'): Promise<string | undefined> => {
+  const ai = getAI();
+  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const parts: Part[] = [];
+  
+  characters.filter(c => c.image).forEach(c => { 
+    parts.push({ text: `FACE REF ("${c.name}"):` }, { inlineData: { data: c.image!.split(',')[1], mimeType: c.mimeType! } }); 
+  });
+  
+  if (styleRef) { 
+    parts.push({ text: "STYLE REF:" }, { inlineData: { data: styleRef.data.split(',')[1], mimeType: styleRef.mimeType } }); 
   }
-}
+  
+  parts.push({ text: `PROMPT: ${prompt}` });
+
+  const response = await ai.models.generateContent({ 
+    model, 
+    contents: { parts }, 
+    config: { imageConfig: { aspectRatio, imageSize: quality === 'pro' ? "1K" : undefined } } 
+  });
+
+  const part = response.candidates?.[0]?.content?.parts?.[0];
+  if (part?.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+  return undefined;
+};

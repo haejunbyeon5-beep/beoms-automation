@@ -1,46 +1,64 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Beoms Automation – Integrated Engine</title>
+    <title>변지니어스 시네마틱 AI 엔진</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      // Tailwind CSS 다크 모드 설정을 'class'로 지정합니다.
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
-            colors: {
-              gray: {
-                900: '#111827',
-                800: '#1f2937',
-                700: '#374151',
-                600: '#4b5563',
-              },
-              blue: {
-                500: '#3b82f6',
-                600: '#2563eb',
-              }
-            }
-          }
-        }
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              mono: ['Fira Code', 'monospace'],
+            },
+          },
+        },
       }
     </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        /* 기본 배경색을 제거하거나 다크 모드 전역 클래스에 맡깁니다. */
+        margin: 0;
+        padding: 0;
+      }
+      /* 스크롤바 커스텀 (다크 모드 대응) */
+      .dark ::-webkit-scrollbar {
+        width: 10px;
+      }
+      .dark ::-webkit-scrollbar-track {
+        background: #0f172a;
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background: #334155;
+        border-radius: 5px;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background: #475569;
+      }
+    </style>
   <script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.40.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "recharts": "https://esm.sh/recharts@^3.7.0"
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "jszip": "https://esm.sh/jszip@^3.10.1"
   }
 }
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-950 text-gray-100 antialiased overflow-hidden">
-    <div id="root" class="h-screen flex flex-col"></div>
-    <script type="module" src="/index.tsx"></script>
-  </body>
+  <body class="bg-[#0a0a0b] text-slate-300 transition-colors duration-300">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>
