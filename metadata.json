@@ -1,7 +1,0 @@
-{
-  "name": "변지니어스 시네마틱 AI 엔진",
-  "description": "조선풍 시네마틱 프롬프트 엔진",
-  "requestFramePermissions": [
-    "camera"
-  ]
-}
