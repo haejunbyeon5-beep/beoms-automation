@@ -157,7 +157,7 @@ const TRANSLATIONS = {
 const ASPECT_RATIOS: AspectRatio[] = ['16:9', '4:3', '1:1', '9:16'];
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>({ name: '변지니어스', id: 'master' });
   const [lang, setLang] = useState<Language>('ko');
   const [theme, setTheme] = useState<Theme>('dark');
   
@@ -492,7 +492,7 @@ const App: React.FC = () => {
     addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
   };
 
-  if (!user) return <Auth onLogin={setUser} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
+  //if (!user) return <Auth onLogin={setUser} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
 
   if (quotaError) {
     return (
