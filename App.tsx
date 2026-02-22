@@ -42,17 +42,16 @@ import {
   optimizePrompt, 
   generateSceneImage, 
   autoSegmentScript, 
-  generateCharacterProfileImage,
-  analyzeScriptForCharacters
+  generateCharacterProfileImage 
 } from './services/geminiService';
 
 const PERSISTENCE_KEY = 'sb_workspace_data_v1';
 
 const TRANSLATIONS = {
   en: {
-    title: "Byun-genius Cinematic AI",
-    pro: "Engine",
-    subtitle: "Joseon-style Cinematic Prompt Engine",
+    title: "DreamTube Studio",
+    pro: "Pro",
+    subtitle: "Ensemble Production Engine",
     exportZip: "EXPORT ZIP",
     startProduction: "START PRODUCTION",
     stopProduction: "STOP",
@@ -64,7 +63,7 @@ const TRANSLATIONS = {
     artStyle: "Artistic Style",
     aspectRatio: "Aspect Ratio",
     atmosphere: "Atmosphere & Lighting",
-    atmospherePlaceholder: "e.g. Moonlight, Candlelight, Foggy morning",
+    atmospherePlaceholder: "e.g. Neon-noir, sunrise, cinematic bokeh",
     styleRefLabel: "Style Reference Image",
     styleRefDesc: "Optional reference for lighting/mood",
     charEnsemble: "Character Ensemble (Consistency Lock)",
@@ -95,21 +94,12 @@ const TRANSLATIONS = {
     qDescPro: "Best detail. Requires billing-enabled project.",
     resetWorkspace: "Reset Workspace",
     confirmReset: "Are you sure? This will delete all generated images and text.",
-    saved: "Saved",
-    customKeyLabel: "Custom API Key",
-    setKey: "Set Key",
-    removeKey: "Remove",
-    keyPlaceholder: "Enter Gemini API Key",
-    autoAnalyze: "Auto Analyze Characters",
-    analyzing: "Analyzing...",
-    refreshAll: "Refresh All",
-    pauseProduction: "PAUSE",
-    resumeProduction: "RESUME"
+    saved: "Saved"
   },
   ko: {
-    title: "변지니어스 시네마틱 AI",
-    pro: "엔진",
-    subtitle: "조선풍 시네마틱 프롬프트 엔진",
+    title: "몽상튜브 스튜디오",
+    pro: "프로",
+    subtitle: "앙상블 프로덕션 엔진",
     exportZip: "ZIP 내보내기",
     startProduction: "제작 시작",
     stopProduction: "중지",
@@ -121,7 +111,7 @@ const TRANSLATIONS = {
     artStyle: "예술적 스타일",
     aspectRatio: "화면 비율",
     atmosphere: "분위기 & 조명",
-    atmospherePlaceholder: "예: 달빛, 촛불, 안개 낀 아침",
+    atmospherePlaceholder: "예: 네온 누아르, 일출, 시네마틱 보케",
     styleRefLabel: "스타일 레퍼런스 이미지",
     styleRefDesc: "조명이나 분위기를 위한 선택적 참고 이미지",
     charEnsemble: "등장인물 설정 (일관성 유지)",
@@ -152,32 +142,26 @@ const TRANSLATIONS = {
     qDescPro: "최고의 디테일을 제공합니다. 결제 계정 연결이 필요합니다.",
     resetWorkspace: "워크스페이스 초기화",
     confirmReset: "정말 초기화하시겠습니까? 생성된 모든 이미지와 텍스트가 삭제됩니다.",
-    saved: "저장됨",
-    customKeyLabel: "커스텀 API 키",
-    setKey: "키 설정",
-    removeKey: "삭제",
-    keyPlaceholder: "Gemini API 키 입력",
-    autoAnalyze: "캐릭터 자동 분석",
-    analyzing: "분석 중...",
-    refreshAll: "전체 다시 분석",
-    pauseProduction: "일시정지",
-    resumeProduction: "이어서 제작"
+    saved: "저장됨"
   }
 };
 
 const ASPECT_RATIOS: AspectRatio[] = ['16:9', '4:3', '1:1', '9:16'];
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>({ name: "Guest", email: "guest@example.com", avatar: "" });
+  const [user, setUser] = useState<User | null>(null);
   const [lang, setLang] = useState<Language>('ko');
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>(() => 
+    (localStorage.getItem('sb_theme') as Theme) || 
+    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+  );
   
   // Persistence States
   const [quality, setQuality] = useState<ImageQuality>('standard');
   const [script, setScript] = useState('');
   const [targetSceneCount, setTargetSceneCount] = useState(5);
   const [isAutoSegment, setIsAutoSegment] = useState(true);
-  const [stylePreset, setStylePreset] = useState<StylePreset>('사극 영화 톤(Historical Drama)');
+  const [stylePreset, setStylePreset] = useState<StylePreset>('Photorealistic');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('16:9');
   const [customStyle, setCustomStyle] = useState('');
   const [styleRef, setStyleRef] = useState<{ data: string, mimeType: string } | null>(null);
@@ -195,17 +179,11 @@ const App: React.FC = () => {
   const stopRequestedRef = useRef(false);
   const isInitialMount = useRef(true);
 
-  const [customApiKey, setCustomApiKey] = useState('');
-  const [showKeyInput, setShowKeyInput] = useState(false);
-
   // Load Saved Data
   useEffect(() => {
     const savedUser = localStorage.getItem('sb_user');
     if (savedUser) setUser(JSON.parse(savedUser));
     checkApiKeyStatus();
-
-    const savedKey = localStorage.getItem('custom_gemini_api_key');
-    if (savedKey) setCustomApiKey(savedKey);
 
     const savedData = localStorage.getItem(PERSISTENCE_KEY);
     if (savedData) {
@@ -215,7 +193,7 @@ const App: React.FC = () => {
         setScript(parsed.script || '');
         setTargetSceneCount(parsed.targetSceneCount || 5);
         setIsAutoSegment(parsed.isAutoSegment ?? true);
-        setStylePreset(parsed.stylePreset || '사극 영화 톤(Historical Drama)');
+        setStylePreset(parsed.stylePreset || 'Photorealistic');
         setAspectRatio(parsed.aspectRatio || '16:9');
         setCustomStyle(parsed.customStyle || '');
         setStyleRef(parsed.styleRef || null);
@@ -261,9 +239,9 @@ const App: React.FC = () => {
   }, [quality, script, targetSceneCount, isAutoSegment, stylePreset, aspectRatio, customStyle, styleRef, characters, scenes]);
 
   useEffect(() => {
-    document.documentElement.classList.add('dark');
-    localStorage.setItem('sb_theme', 'dark');
-  }, []);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('sb_theme', theme);
+  }, [theme]);
 
   const checkApiKeyStatus = async () => {
     const isSelected = await (window as any).aistudio.hasSelectedApiKey();
@@ -281,31 +259,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleSaveCustomKey = () => {
-    if (customApiKey.trim()) {
-      localStorage.setItem('custom_gemini_api_key', customApiKey.trim());
-      setShowKeyInput(false);
-      addLog(lang === 'ko' ? "🔑 커스텀 API 키가 저장되었습니다." : "🔑 Custom API Key saved.");
-    }
-  };
-
-  const handleRemoveCustomKey = () => {
-    localStorage.removeItem('custom_gemini_api_key');
-    setCustomApiKey('');
-    setShowKeyInput(false);
-    addLog(lang === 'ko' ? "🗑️ 커스텀 API 키가 삭제되었습니다." : "🗑️ Custom API Key removed.");
-  };
-
   const handleResetWorkspace = () => {
     if (window.confirm(t.confirmReset)) {
-      stopProduction();
       setScript('');
       setScenes([]);
       setCharacters([{ id: '1', name: '' }]);
       setCustomStyle('');
       setStyleRef(null);
       setLogs([]);
-      // Clear persistence
       localStorage.removeItem(PERSISTENCE_KEY);
       addLog(lang === 'ko' ? "🧹 워크스페이스가 초기화되었습니다." : "🧹 Workspace cleared.");
     }
@@ -455,71 +416,6 @@ const App: React.FC = () => {
     setIsProcessing(false);
   };
 
-  const handleAutoAnalyzeCharacters = async () => {
-    if (!script) {
-      alert(lang === 'ko' ? "먼저 스크립트를 입력해주세요." : "Please enter a script first.");
-      return;
-    }
-    
-    setIsProcessing(true);
-    addLog(lang === 'ko' ? "🤖 캐릭터 분석 중..." : "🤖 Analyzing characters...");
-    
-    try {
-      const analyzedChars = await analyzeScriptForCharacters(script);
-      if (analyzedChars.length > 0) {
-        const charsWithLoading = analyzedChars.map(c => ({ ...c, isGenerating: true }));
-        setCharacters(charsWithLoading);
-        
-        addLog(lang === 'ko' ? `✅ ${analyzedChars.length}명의 캐릭터를 찾았습니다. 이미지 생성 시작...` : `✅ Found ${analyzedChars.length} characters. Generating images...`);
-        
-        const promises = charsWithLoading.map(async (char) => {
-           try {
-             const imageUrl = await generateCharacterProfileImage(
-               char.name, 
-               char.description || "", 
-               stylePreset, 
-               customStyle,
-               quality
-             );
-             
-             setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image: imageUrl, isGenerating: false } : c));
-           } catch (e) {
-             console.error(e);
-             setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, isGenerating: false } : c));
-           }
-        });
-        
-        await Promise.all(promises);
-      } else {
-        addLog(lang === 'ko' ? "⚠️ 캐릭터를 찾지 못했습니다." : "⚠️ No characters found.");
-      }
-    } catch (e) {
-      console.error(e);
-      addLog(lang === 'ko' ? "❌ 분석 실패" : "❌ Analysis failed");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const resumeProduction = async () => {
-    const pendingScenes = scenes.filter(s => s.status === 'idle' || s.status === 'error');
-    if (pendingScenes.length === 0) return alert(lang === 'ko' ? '제작할 남은 장면이 없습니다.' : 'No pending scenes.');
-    
-    setIsProcessing(true);
-    stopRequestedRef.current = false;
-    addLog(`▶️ ${lang === 'ko' ? '제작 재개' : 'Resuming production'}: ${pendingScenes.length} scenes remaining.`);
-    
-    for (const scene of pendingScenes) {
-      if (stopRequestedRef.current) break;
-      await generateSingleScene(scene);
-    }
-    
-    setIsProcessing(false);
-    if (!stopRequestedRef.current) {
-      addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
-    }
-  };
-
   const startProduction = async () => {
     if (!script.trim()) return alert(lang === 'ko' ? '스크립트를 입력해주세요.' : 'Script is empty.');
     
@@ -570,28 +466,28 @@ const App: React.FC = () => {
     addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
   };
 
-
+  if (!user) return <Auth onLogin={setUser} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
 
   if (quotaError) {
     return (
-      <div className="min-h-screen bg-[#0a0a0b] flex items-center justify-center p-6 transition-colors">
-        <div className="max-w-md w-full bg-[#12141a] rounded-[2.5rem] border border-slate-800/50 shadow-2xl p-10 text-center">
-          <div className="bg-red-900/20 text-red-500 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-red-900/30">
+      <div className="min-h-screen bg-[#F9FBFF] dark:bg-slate-950 flex items-center justify-center p-6 transition-colors">
+        <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl p-10 text-center">
+          <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8">
             <AlertTriangle size={40} />
           </div>
-          <h1 className="text-3xl font-black text-slate-200 mb-4 uppercase tracking-tight">{t.quotaErrorTitle}</h1>
-          <p className="text-base text-slate-500 mb-8 leading-relaxed font-medium">{t.quotaErrorDesc}</p>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100 mb-4 uppercase tracking-tight">{t.quotaErrorTitle}</h1>
+          <p className="text-base text-slate-500 dark:text-slate-400 mb-8 leading-relaxed font-medium">{t.quotaErrorDesc}</p>
           
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => { setQuotaError(false); setQuality('standard'); }}
-              className="w-full bg-slate-800 text-slate-300 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-[0.98] hover:bg-slate-700"
+              className="w-full bg-slate-900 dark:bg-slate-700 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               {lang === 'ko' ? '표준 모드로 계속하기' : 'Continue in Standard Mode'}
             </button>
             <button 
               onClick={handleSelectKey}
-              className="w-full bg-gradient-to-r from-red-900 to-orange-900 text-red-100 py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:from-red-800 hover:to-orange-800 shadow-xl shadow-black/40 border border-red-900/30 transition-all active:scale-[0.98]"
+              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 shadow-xl shadow-blue-100 dark:shadow-none transition-all active:scale-[0.98]"
             >
               <RefreshCcw size={20} />
               {lang === 'ko' ? '유료 키로 다시 시도' : 'Try Paid Project Key'}
@@ -603,72 +499,47 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0a0a0b] text-slate-400 font-sans selection:bg-red-900/30 selection:text-red-200">
+    <div className="min-h-screen flex flex-col bg-[#F9FBFF] dark:bg-slate-950 transition-colors">
       {zoomUrl && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 cursor-zoom-out backdrop-blur-sm" onClick={() => setZoomUrl(null)}>
-          <button className="absolute top-6 right-6 text-slate-400 hover:text-white transition-colors"><X size={32} /></button>
-          <img src={zoomUrl} alt="Zoomed" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain ring-1 ring-white/10" />
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomUrl(null)}>
+          <button className="absolute top-6 right-6 text-white hover:text-blue-400"><X size={32} /></button>
+          <img src={zoomUrl} alt="Zoomed" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" />
         </div>
       )}
 
-      <nav className="bg-[#0a0a0b]/80 backdrop-blur-md border-b border-slate-800/50 sticky top-0 z-40 px-8 py-4 flex items-center justify-between shadow-lg shadow-black/40">
+      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-8 py-5 flex items-center justify-between shadow-sm transition-colors">
         <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-red-900 to-orange-900 text-red-100 p-3 rounded-xl shadow-lg shadow-red-900/10 border border-red-800/30"><Clapperboard size={24} /></div>
+          <div className="bg-slate-900 dark:bg-blue-600 text-white p-3 rounded-xl shadow-xl shadow-slate-200 dark:shadow-none"><Clapperboard size={24} /></div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black tracking-tight text-slate-200 uppercase">{t.title} <span className="text-red-700">{t.pro}</span></h1>
+              <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase">{t.title} <span className="text-blue-600 dark:text-blue-400">{t.pro}</span></h1>
               {lastSaved && (
-                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-900 rounded text-[10px] font-bold text-slate-600 uppercase transition-all border border-slate-800">
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase transition-all">
                   <Save size={10} /> {t.saved}
                 </div>
               )}
             </div>
-            <p className="text-xs text-slate-600 font-bold uppercase tracking-widest">{t.subtitle}</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest">{t.subtitle}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Theme toggle removed as we are enforcing dark mode */}
+          <button 
+            onClick={toggleTheme}
+            className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all"
+          >
+            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          </button>
           
           <button 
             onClick={toggleLanguage} 
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-black text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-all uppercase"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all uppercase"
           >
             <Languages size={16} />{lang === 'en' ? 'KO' : 'EN'}
           </button>
 
-          <div className="relative">
-            <button 
-              onClick={() => setShowKeyInput(!showKeyInput)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-xs font-black transition-all uppercase ${customApiKey ? 'bg-red-900/10 border-red-900/30 text-red-500' : 'border-slate-800 text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
-            >
-              <Key size={16} /> {customApiKey ? (lang === 'ko' ? '키 사용 중' : 'Key Active') : (lang === 'ko' ? '키 설정' : 'Set Key')}
-            </button>
-            
-            {showKeyInput && (
-              <div className="absolute top-full right-0 mt-2 w-72 bg-[#12141a] rounded-2xl border border-slate-800 shadow-2xl shadow-black p-4 z-50 flex flex-col gap-3">
-                <label className="text-xs font-black text-slate-500 uppercase">{t.customKeyLabel}</label>
-                <input 
-                  type="password" 
-                  value={customApiKey} 
-                  onChange={(e) => setCustomApiKey(e.target.value)} 
-                  placeholder={t.keyPlaceholder}
-                  className="w-full px-3 py-2 bg-[#0a0a0b] border border-slate-800 rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-900 text-slate-300 placeholder-slate-700"
-                />
-                <div className="flex gap-2">
-                  <button onClick={handleSaveCustomKey} className="flex-1 bg-red-900 text-red-100 py-2 rounded-lg text-xs font-bold hover:bg-red-800 transition-colors border border-red-800">
-                    {t.setKey}
-                  </button>
-                  <button onClick={handleRemoveCustomKey} className="px-3 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-700 hover:text-white transition-colors border border-slate-700">
-                    {t.removeKey}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           <button 
             onClick={() => changeQuality(quality === 'standard' ? 'pro' : 'standard')}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-full text-xs font-black transition-all uppercase tracking-tight ${quality === 'pro' ? 'bg-amber-900/10 border-amber-900/30 text-amber-600' : 'bg-slate-900 border-slate-800 text-slate-500'}`}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-full text-xs font-black transition-all uppercase tracking-tight ${quality === 'pro' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
           >
             {quality === 'pro' ? <Trophy size={16} /> : <Cpu size={16} />}
             {quality === 'pro' ? 'Ultra (Paid)' : 'Standard (Free)'}
@@ -677,82 +548,94 @@ const App: React.FC = () => {
           {quality === 'pro' && (
             <button 
               onClick={handleSelectKey}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-900/10 border border-emerald-900/30 rounded-full text-xs font-black text-emerald-600 hover:bg-emerald-900/20 transition-colors uppercase tracking-tight"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-full text-xs font-black text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors uppercase tracking-tight"
             >
               <ShieldCheck size={16} />
               {hasApiKey ? t.keyConnected : t.connectKey}
             </button>
           )}
           
-          <button onClick={() => downloadAsZip(scenes)} disabled={isProcessing || !scenes.some(s => s.variants.length > 0)} className="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-800 text-sm font-bold text-slate-500 hover:bg-slate-800 hover:text-slate-300 disabled:opacity-30 transition-all uppercase"><Download size={18} />{t.exportZip}</button>
+          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full mr-2">
+            {user.avatar ? <img src={user.avatar} alt={user.name} className="w-6 h-6 rounded-full border border-blue-200 dark:border-blue-500" /> : <UserIcon size={16} className="text-blue-500" />}
+            <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-tight">{user.name}</span>
+          </div>
+
+          <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-100 dark:border-red-900/30 text-xs font-black text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all uppercase"><LogOut size={16} />{t.logout}</button>
+          <button onClick={() => downloadAsZip(scenes)} disabled={isProcessing || !scenes.some(s => s.variants.length > 0)} className="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-all uppercase"><Download size={18} />{t.exportZip}</button>
+          
+          <div className="flex items-center gap-2">
+            {!isProcessing ? (
+              <button onClick={startProduction} className="flex items-center gap-2 px-10 py-3 rounded-xl bg-blue-600 text-white text-sm font-black hover:bg-blue-700 shadow-lg shadow-blue-100 dark:shadow-none transition-all hover:-translate-y-0.5 uppercase"><Play size={18} />{t.startProduction}</button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-8 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-black uppercase"><Sparkles className="animate-spin" size={18} />{t.running}</div>
+                <button onClick={stopProduction} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm font-black hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-100 dark:border-red-800"><Square size={16} fill="currentColor" />{t.stopProduction}</button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
-      <main className="flex-1 max-w-[1800px] mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <main className="flex-1 max-w-[1700px] mx-auto w-full p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <section className="bg-[#12141a] rounded-3xl border border-slate-800/50 shadow-xl p-6 flex flex-col gap-6 h-full">
+          <section className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 flex flex-col gap-6 transition-colors">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-slate-300"><Layout size={24} className="text-slate-600" /><h2 className="text-base font-black uppercase tracking-widest">{t.masterScript}</h2></div>
+              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Layout size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.masterScript}</h2></div>
               <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleResetWorkspace} 
-                  className="flex items-center gap-2 px-3 py-1.5 bg-red-900/10 text-red-500 rounded-lg text-xs font-black uppercase hover:bg-red-900/20 transition-colors border border-red-900/20"
-                  title={t.resetWorkspace}
-                >
-                  <Trash2 size={14} /> {t.resetWorkspace}
-                </button>
-                <div className="bg-red-900/10 text-red-700 text-xs font-bold px-2.5 py-1 rounded-md border border-red-900/20">{t.scriptBadge}</div>
+                <button onClick={handleResetWorkspace} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title={t.resetWorkspace}><Trash2 size={18} /></button>
+                <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-bold px-2.5 py-1 rounded-md">{t.scriptBadge}</div>
               </div>
             </div>
-            <div className="flex items-center justify-between p-4 bg-[#0a0a0b] rounded-2xl border border-slate-800/50">
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-4">
-                <div className={`p-2.5 rounded-lg ${isAutoSegment ? 'bg-red-900 text-red-100 shadow-lg shadow-black/20 border border-red-800' : 'bg-slate-900 text-slate-600 border border-slate-800'}`}><Scissors size={20} /></div>
-                <div><h3 className="text-sm font-black text-slate-300 uppercase tracking-tight">{t.autoSegment}</h3><p className="text-xs text-slate-600 font-medium">Gemini Intelligence</p></div>
+                <div className={`p-2.5 rounded-lg ${isAutoSegment ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 dark:shadow-none' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}><Scissors size={20} /></div>
+                <div><h3 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight">{t.autoSegment}</h3><p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Gemini Intelligence</p></div>
               </div>
-              <button onClick={() => setIsAutoSegment(!isAutoSegment)} className={`w-14 h-7 rounded-full transition-colors relative border border-slate-800 ${isAutoSegment ? 'bg-red-900' : 'bg-slate-900'}`}><div className={`absolute top-1 bg-slate-200 w-5 h-5 rounded-full transition-all ${isAutoSegment ? 'left-8' : 'left-1'}`} /></button>
+              <button onClick={() => setIsAutoSegment(!isAutoSegment)} className={`w-14 h-7 rounded-full transition-colors relative ${isAutoSegment ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-700'}`}><div className={`absolute top-1 bg-white w-5 h-5 rounded-full transition-all ${isAutoSegment ? 'left-8' : 'left-1'}`} /></button>
             </div>
-            <div className="relative group flex-1">
+            <div className="relative group">
               <textarea
-                className="w-full h-full min-h-[400px] p-6 bg-[#0a0a0b] text-slate-300 border border-slate-800/50 rounded-2xl focus:ring-1 focus:ring-red-900/50 focus:border-red-900/50 outline-none text-base font-medium leading-relaxed resize-none shadow-inner placeholder-slate-700"
+                className="w-full h-[350px] p-6 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-base font-medium leading-relaxed resize-none shadow-inner"
                 placeholder={t.scriptPlaceholder}
                 value={script}
                 onChange={(e) => setScript(e.target.value)}
               />
             </div>
             {isAutoSegment ? (
-              <div className="space-y-4 p-5 bg-red-900/5 rounded-2xl border border-red-900/10">
-                <div className="flex items-center justify-between"><label className="text-xs font-black text-red-800 uppercase tracking-widest flex items-center gap-2"><Zap size={14} /> {t.targetScenes}</label><span className="bg-red-900 text-red-100 text-sm font-black px-3 py-1.5 rounded-lg shadow-md border border-red-800">{targetSceneCount}</span></div>
+              <div className="space-y-5 p-5 bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/20">
+                <div className="flex items-center justify-between"><label className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} /> {t.targetScenes}</label><span className="bg-blue-600 dark:bg-blue-500 text-white text-sm font-black px-3 py-1.5 rounded-lg shadow-md">{targetSceneCount}</span></div>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => setTargetSceneCount(Math.max(1, targetSceneCount - 1))} className="p-2.5 bg-[#0a0a0b] border border-slate-800 text-slate-500 rounded-lg hover:bg-slate-900 transition-colors"><Minus size={18} /></button>
-                  <input type="range" min="1" max="100" value={targetSceneCount} onChange={(e) => setTargetSceneCount(parseInt(e.target.value))} className="flex-1 accent-red-900 h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer" />
-                  <button onClick={() => setTargetSceneCount(Math.min(100, targetSceneCount + 1))} className="p-2.5 bg-[#0a0a0b] border border-slate-800 text-slate-500 rounded-lg hover:bg-slate-900 transition-colors"><Plus size={18} /></button>
+                  <button onClick={() => setTargetSceneCount(Math.max(1, targetSceneCount - 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg"><Minus size={18} /></button>
+                  <input type="range" min="1" max="100" value={targetSceneCount} onChange={(e) => setTargetSceneCount(parseInt(e.target.value))} className="flex-1 accent-blue-600" />
+                  <button onClick={() => setTargetSceneCount(Math.min(100, targetSceneCount + 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg"><Plus size={18} /></button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2.5 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-                <Info size={16} className="text-slate-600 shrink-0" />
-                <p className="text-xs font-bold text-slate-500 uppercase tracking-tight leading-tight">
+              <div className="flex items-center gap-2.5 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                <Info size={16} className="text-blue-500 shrink-0" />
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight leading-tight">
                   {t.manualInfo}
                 </p>
               </div>
             )}
           </section>
+          <section className="h-[280px]"><StatusMonitor logs={logs} /></section>
         </div>
 
-        <div className="lg:col-span-8 flex flex-col gap-6">
-          <section className="bg-[#12141a] rounded-3xl border border-slate-800/50 shadow-xl p-8 space-y-8">
+        <div className="lg:col-span-8 flex flex-col gap-8">
+          <section className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 space-y-8 transition-colors">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-slate-300"><Settings2 size={24} className="text-slate-600" /><h2 className="text-base font-black uppercase tracking-widest">{t.visualDirection}</h2></div>
-              <div className="flex bg-[#0a0a0b] p-1 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Settings2 size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.visualDirection}</h2></div>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button 
                   onClick={() => changeQuality('standard')}
-                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'standard' ? 'bg-slate-800 text-red-500 shadow-sm border border-slate-700' : 'text-slate-600 hover:text-slate-400'}`}
+                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'standard' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400'}`}
                 >
                   Standard
                 </button>
                 <button 
                   onClick={() => changeQuality('pro')}
-                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'pro' ? 'bg-slate-800 text-amber-600 shadow-sm border border-slate-700' : 'text-slate-600 hover:text-slate-400'}`}
+                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'pro' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-400'}`}
                 >
                   Ultra (Pro)
                 </button>
@@ -761,39 +644,31 @@ const App: React.FC = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-7">
-                <div className="space-y-4"><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.artStyle}</label>
-                  <div className="grid grid-cols-2 gap-3">{STYLE_PRESETS.map((p) => (<button key={p} onClick={() => setStylePreset(p)} className={`px-5 py-4 rounded-xl text-xs font-black border transition-all ${stylePreset === p ? 'bg-red-900/10 border-red-900/30 text-red-500' : 'bg-[#0a0a0b] border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-400'}`}>{p}</button>))}</div>
+                <div className="space-y-4"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.artStyle}</label>
+                  <div className="grid grid-cols-2 gap-3">{STYLE_PRESETS.map((p) => (<button key={p} onClick={() => setStylePreset(p)} className={`px-5 py-4 rounded-xl text-xs font-black border-2 transition-all ${stylePreset === p ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}>{p}</button>))}</div>
                 </div>
-                <div className="space-y-4"><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.aspectRatio}</label>
-                  <div className="flex gap-3">{ASPECT_RATIOS.map((r) => (<button key={r} onClick={() => setAspectRatio(r)} className={`flex-1 py-4 rounded-xl text-xs font-black border transition-all flex items-center justify-center gap-2 ${aspectRatio === r ? 'bg-red-900/10 border-red-900/30 text-red-500' : 'bg-[#0a0a0b] border-slate-800 text-slate-500 hover:border-slate-700 hover:text-slate-400'}`}><Maximize size={16} className={r === '9:16' ? 'rotate-90' : ''} />{r}</button>))}</div>
+                <div className="space-y-4"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.aspectRatio}</label>
+                  <div className="flex gap-3">{ASPECT_RATIOS.map((r) => (<button key={r} onClick={() => setAspectRatio(r)} className={`flex-1 py-4 rounded-xl text-xs font-black border-2 transition-all flex items-center justify-center gap-2 ${aspectRatio === r ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}><Maximize size={16} className={r === '9:16' ? 'rotate-90' : ''} />{r}</button>))}</div>
                 </div>
               </div>
-              <div className="space-y-5"><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.atmosphere}</label>
-                <div className="flex flex-col gap-5"><textarea placeholder={t.atmospherePlaceholder} className="w-full bg-[#0a0a0b] text-slate-300 border border-slate-800 rounded-xl px-5 py-4 text-sm outline-none h-[110px] focus:ring-1 focus:ring-red-900/30 placeholder-slate-700" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} />
-                  <div className="space-y-3"><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.styleRefLabel}</label>
-                    <div className="relative group">{styleRef ? (<div className="relative h-24 w-full rounded-xl overflow-hidden border border-slate-800"><img src={styleRef.data} alt="Ref" className="w-full h-full object-cover" /><button onClick={() => setStyleRef(null)} className="absolute top-2 right-2 bg-red-900 text-red-100 p-1.5 rounded-full shadow-lg border border-red-800"><X size={14} /></button></div>) : (
-                      <label className="h-24 w-full border border-dashed border-slate-800 rounded-xl flex items-center justify-center gap-4 text-slate-600 cursor-pointer hover:border-red-900/30 hover:text-red-500 transition-all bg-[#0a0a0b]"><ImageIcon size={24} /><div className="flex flex-col"><span className="text-xs font-bold uppercase">{t.styleRefLabel}</span><span className="text-[10px] uppercase">{t.styleRefDesc}</span></div><input type="file" className="hidden" accept="image/*" onChange={handleStyleRefUpload} /></label>)}
+              <div className="space-y-5"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.atmosphere}</label>
+                <div className="flex flex-col gap-5"><textarea placeholder={t.atmospherePlaceholder} className="w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-4 text-sm outline-none h-[110px] focus:ring-2 focus:ring-blue-500/20" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} />
+                  <div className="space-y-3"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.styleRefLabel}</label>
+                    <div className="relative group">{styleRef ? (<div className="relative h-24 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800"><img src={styleRef.data} alt="Ref" className="w-full h-full object-cover" /><button onClick={() => setStyleRef(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg"><X size={14} /></button></div>) : (
+                      <label className="h-24 w-full border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-4 text-slate-400 dark:text-slate-600 cursor-pointer hover:border-blue-400 transition-colors"><ImageIcon size={24} /><div className="flex flex-col"><span className="text-xs font-bold uppercase">{t.styleRefLabel}</span><span className="text-[10px] uppercase">{t.styleRefDesc}</span></div><input type="file" className="hidden" accept="image/*" onChange={handleStyleRefUpload} /></label>)}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="pt-6 border-t border-slate-800/50">
+            <div className="pt-6 border-t border-slate-50 dark:border-slate-800">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-3"><Layers size={20} className="text-slate-600" /><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.charEnsemble}</label></div>
+                  <div className="flex items-center gap-3"><Layers size={20} className="text-blue-500" /><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.charEnsemble}</label></div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button 
-                    onClick={handleAutoAnalyzeCharacters}
-                    disabled={isProcessing}
-                    className="flex items-center gap-2 text-xs font-black text-slate-300 bg-slate-800 px-4 py-2 rounded-full hover:bg-slate-700 transition-colors border border-slate-700 uppercase tracking-tighter disabled:opacity-50"
-                  >
-                    <Sparkles size={14} className="text-yellow-500" /> 
-                    {characters.length > 1 ? t.refreshAll : t.autoAnalyze}
-                  </button>
                   {characters.length < 12 && (
-                    <button onClick={handleAddCharacter} className="flex items-center gap-2 text-xs font-black text-red-500 bg-red-900/10 px-4 py-2 rounded-full hover:bg-red-900/20 transition-colors border border-red-900/20 uppercase tracking-tighter">
+                    <button onClick={handleAddCharacter} className="flex items-center gap-2 text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors border border-blue-100 dark:border-blue-900/30 uppercase tracking-tighter">
                       <Plus size={16} /> {t.newSlot}
                     </button>
                   )}
@@ -813,49 +688,15 @@ const App: React.FC = () => {
             </div>
           </section>
 
-          <section className="space-y-7 bg-[#12141a] p-8 rounded-3xl border border-slate-800/50 shadow-xl">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-3 text-slate-300"><Clapperboard size={24} className="text-slate-600" /><h2 className="text-base font-black uppercase tracking-widest">{t.storyboardOutput}</h2></div><div className="flex items-center gap-5">{scenes.some(s => s.status === 'error') && (<button onClick={handleRetryFailed} className="flex items-center gap-2 px-5 py-2 bg-amber-900/10 text-amber-600 rounded-full border border-amber-900/20 text-xs font-black uppercase"><RefreshCcw size={14} />{t.retryFailed}</button>)}{scenes.length > 0 && (<span className="text-xs font-bold text-slate-600 uppercase">{scenes.length} {t.framesGenerated}</span>)}</div></div>
+          <section className="space-y-7">
+            <div className="flex items-center justify-between"><div className="flex items-center gap-3 text-slate-900 dark:text-white"><Clapperboard size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.storyboardOutput}</h2></div><div className="flex items-center gap-5">{scenes.some(s => s.status === 'error') && (<button onClick={handleRetryFailed} className="flex items-center gap-2 px-5 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-full border border-amber-100 dark:border-amber-900/30 text-xs font-black uppercase"><RefreshCcw size={14} />{t.retryFailed}</button>)}{scenes.length > 0 && (<span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">{scenes.length} {t.framesGenerated}</span>)}</div></div>
             {scenes.length > 0 ? (<SceneGallery scenes={scenes} onRegenerate={handleRegenerateScene} onZoom={setZoomUrl} isProcessing={isProcessing} />) : (
-              <div className="bg-[#0a0a0b] rounded-3xl border border-dashed border-slate-800 py-28 flex flex-col items-center justify-center text-slate-600 gap-5 transition-colors"><div className="bg-slate-900 p-8 rounded-full border border-slate-800"><Layout size={48} className="opacity-20" /></div><div className="text-center"><p className="text-base font-bold text-slate-500">{t.workspaceEmpty}</p><p className="text-sm text-slate-700">{t.workspaceEmptyDesc}</p></div></div>
+              <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 py-28 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 gap-5 transition-colors"><div className="bg-slate-50 dark:bg-slate-800 p-8 rounded-full"><Layout size={48} className="opacity-20" /></div><div className="text-center"><p className="text-base font-bold text-slate-500 dark:text-slate-400">{t.workspaceEmpty}</p><p className="text-sm">{t.workspaceEmptyDesc}</p></div></div>
             )}
-            
-            <div className="pt-8 border-t border-slate-800/50">
-               <StatusMonitor logs={logs} />
-            </div>
           </section>
-          
-          {/* Bottom Action Bar */}
-          <div className="sticky bottom-6 z-30">
-             {!isProcessing ? (
-               <div className="flex gap-4">
-                 {scenes.length > 0 && scenes.some(s => s.status === 'idle' || s.status === 'error') ? (
-                   <button onClick={resumeProduction} className="flex-1 flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-800 text-blue-50 text-lg font-black hover:from-blue-800 hover:to-indigo-700 shadow-2xl shadow-black/50 transition-all hover:-translate-y-1 uppercase tracking-wide border border-blue-800/50 ring-1 ring-white/5">
-                     <Play size={24} fill="currentColor" className="text-blue-200" />
-                     {t.resumeProduction}
-                   </button>
-                 ) : (
-                   <button onClick={startProduction} className="w-full flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-red-900 to-orange-800 text-red-50 text-lg font-black hover:from-red-800 hover:to-orange-700 shadow-2xl shadow-black/50 transition-all hover:-translate-y-1 uppercase tracking-wide border border-red-800/50 ring-1 ring-white/5">
-                     <Play size={24} fill="currentColor" className="text-red-200" />
-                     {t.startProduction}
-                   </button>
-                 )}
-               </div>
-             ) : (
-               <div className="flex gap-4">
-                 <div className="flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-2xl bg-slate-900 text-slate-500 text-lg font-black uppercase border border-slate-800">
-                   <Sparkles className="animate-spin text-red-800" size={24} />
-                   {t.running}
-                 </div>
-                 <button onClick={stopProduction} className="px-8 py-5 rounded-2xl bg-slate-900 text-red-800 text-lg font-black hover:bg-slate-800 border border-slate-800 hover:border-red-900/30 transition-all uppercase flex items-center gap-2" title={t.stopProduction}>
-                   <Square size={24} fill="currentColor" />
-                   <span className="text-xs font-bold">{t.pauseProduction}</span>
-                 </button>
-               </div>
-             )}
-          </div>
         </div>
       </main>
-      <footer className="bg-[#12141a] border-t border-slate-800/50 py-10 px-8 text-center mt-12"><p className="text-xs text-slate-700 font-black uppercase tracking-[0.3em]">&copy; 2025 Byun-genius Cinematic AI Engine</p></footer>
+      <footer className="bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 py-10 px-8 text-center mt-12 transition-colors"><p className="text-xs text-slate-400 dark:text-slate-600 font-black uppercase tracking-[0.3em]">&copy; 2025 AI Ensemble Studio & Precision Visualization Engine</p></footer>
     </div>
   );
 };

@@ -31,12 +31,13 @@ export interface Scene {
   variants: SceneVariant[];
 }
 
-export type StylePreset = '사극 영화 톤(Historical Drama)' | '한국 전통 수묵화(Ink Wash)' | '고품질 웹툰(High-quality Webtoon)';
+export type StylePreset = 'Photorealistic' | 'Anime Style' | '3D Render' | 'Digital Art';
 
 export const STYLE_PRESETS: StylePreset[] = [
-  '사극 영화 톤(Historical Drama)',
-  '한국 전통 수묵화(Ink Wash)',
-  '고품질 웹툰(High-quality Webtoon)'
+  'Photorealistic',
+  'Anime Style',
+  '3D Render',
+  'Digital Art'
 ];
 
 export type AspectRatio = '16:9' | '4:3' | '1:1' | '9:16';
