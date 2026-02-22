@@ -2,7 +2,9 @@ import { GoogleGenAI, Part, Type } from "@google/genai";
 import { Character, AspectRatio, ImageQuality } from "../types";
 
 // [보안] 키 설정 우선 적용
-const getApiKey = () => localStorage.getItem('my_gemini_key') || (process.env.API_KEY as string);
+const getApiKey = () =>
+  localStorage.getItem("my_gemini_key") ||
+  import.meta.env.VITE_GEMINI_API_KEY;
 const getAI = () => new GoogleGenAI({ apiKey: getApiKey() });
 
 // [STYLE] 조선시대 시네마틱 고정 스타일 블록
