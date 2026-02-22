@@ -119,12 +119,11 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene, onRegenerate, onZoom, isPr
               </div>
             )}
             <button 
-              disabled={isSelfProcessing}
               onClick={(e) => { e.stopPropagation(); onRegenerate(scene.id); }}
-              className="text-slate-500 hover:text-slate-300 hover:bg-slate-800 p-2 rounded-lg disabled:opacity-30 transition-colors"
-              title="Regenerate this scene"
+              className="text-slate-500 hover:text-slate-300 hover:bg-slate-800 p-2 rounded-lg transition-colors"
+              title="Force Regenerate"
             >
-              <RefreshCw size={18} className={isSelfProcessing ? 'animate-spin' : ''} />
+              <RefreshCw size={18} className={isSelfProcessing ? 'animate-spin text-red-500' : ''} />
             </button>
           </div>
         </div>

@@ -42,7 +42,8 @@ import {
   optimizePrompt, 
   generateSceneImage, 
   autoSegmentScript, 
-  generateCharacterProfileImage 
+  generateCharacterProfileImage,
+  analyzeScriptForCharacters
 } from './services/geminiService';
 
 const PERSISTENCE_KEY = 'sb_workspace_data_v1';
@@ -98,7 +99,12 @@ const TRANSLATIONS = {
     customKeyLabel: "Custom API Key",
     setKey: "Set Key",
     removeKey: "Remove",
-    keyPlaceholder: "Enter Gemini API Key"
+    keyPlaceholder: "Enter Gemini API Key",
+    autoAnalyze: "Auto Analyze Characters",
+    analyzing: "Analyzing...",
+    refreshAll: "Refresh All",
+    pauseProduction: "PAUSE",
+    resumeProduction: "RESUME"
   },
   ko: {
     title: "변지니어스 시네마틱 AI",
@@ -150,14 +156,19 @@ const TRANSLATIONS = {
     customKeyLabel: "커스텀 API 키",
     setKey: "키 설정",
     removeKey: "삭제",
-    keyPlaceholder: "Gemini API 키 입력"
+    keyPlaceholder: "Gemini API 키 입력",
+    autoAnalyze: "캐릭터 자동 분석",
+    analyzing: "분석 중...",
+    refreshAll: "전체 다시 분석",
+    pauseProduction: "일시정지",
+    resumeProduction: "이어서 제작"
   }
 };
 
 const ASPECT_RATIOS: AspectRatio[] = ['16:9', '4:3', '1:1', '9:16'];
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>({ name: '변지니어스', id: 'master' });
+  const [user, setUser] = useState<User | null>({ name: "Guest", email: "guest@example.com", avatar: "" });
   const [lang, setLang] = useState<Language>('ko');
   const [theme, setTheme] = useState<Theme>('dark');
   
@@ -287,12 +298,14 @@ const App: React.FC = () => {
 
   const handleResetWorkspace = () => {
     if (window.confirm(t.confirmReset)) {
+      stopProduction();
       setScript('');
       setScenes([]);
       setCharacters([{ id: '1', name: '' }]);
       setCustomStyle('');
       setStyleRef(null);
       setLogs([]);
+      // Clear persistence
       localStorage.removeItem(PERSISTENCE_KEY);
       addLog(lang === 'ko' ? "🧹 워크스페이스가 초기화되었습니다." : "🧹 Workspace cleared.");
     }
@@ -442,6 +455,71 @@ const App: React.FC = () => {
     setIsProcessing(false);
   };
 
+  const handleAutoAnalyzeCharacters = async () => {
+    if (!script) {
+      alert(lang === 'ko' ? "먼저 스크립트를 입력해주세요." : "Please enter a script first.");
+      return;
+    }
+    
+    setIsProcessing(true);
+    addLog(lang === 'ko' ? "🤖 캐릭터 분석 중..." : "🤖 Analyzing characters...");
+    
+    try {
+      const analyzedChars = await analyzeScriptForCharacters(script);
+      if (analyzedChars.length > 0) {
+        const charsWithLoading = analyzedChars.map(c => ({ ...c, isGenerating: true }));
+        setCharacters(charsWithLoading);
+        
+        addLog(lang === 'ko' ? `✅ ${analyzedChars.length}명의 캐릭터를 찾았습니다. 이미지 생성 시작...` : `✅ Found ${analyzedChars.length} characters. Generating images...`);
+        
+        const promises = charsWithLoading.map(async (char) => {
+           try {
+             const imageUrl = await generateCharacterProfileImage(
+               char.name, 
+               char.description || "", 
+               stylePreset, 
+               customStyle,
+               quality
+             );
+             
+             setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image: imageUrl, isGenerating: false } : c));
+           } catch (e) {
+             console.error(e);
+             setCharacters(prev => prev.map(c => c.id === char.id ? { ...c, isGenerating: false } : c));
+           }
+        });
+        
+        await Promise.all(promises);
+      } else {
+        addLog(lang === 'ko' ? "⚠️ 캐릭터를 찾지 못했습니다." : "⚠️ No characters found.");
+      }
+    } catch (e) {
+      console.error(e);
+      addLog(lang === 'ko' ? "❌ 분석 실패" : "❌ Analysis failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const resumeProduction = async () => {
+    const pendingScenes = scenes.filter(s => s.status === 'idle' || s.status === 'error');
+    if (pendingScenes.length === 0) return alert(lang === 'ko' ? '제작할 남은 장면이 없습니다.' : 'No pending scenes.');
+    
+    setIsProcessing(true);
+    stopRequestedRef.current = false;
+    addLog(`▶️ ${lang === 'ko' ? '제작 재개' : 'Resuming production'}: ${pendingScenes.length} scenes remaining.`);
+    
+    for (const scene of pendingScenes) {
+      if (stopRequestedRef.current) break;
+      await generateSingleScene(scene);
+    }
+    
+    setIsProcessing(false);
+    if (!stopRequestedRef.current) {
+      addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
+    }
+  };
+
   const startProduction = async () => {
     if (!script.trim()) return alert(lang === 'ko' ? '스크립트를 입력해주세요.' : 'Script is empty.');
     
@@ -492,7 +570,7 @@ const App: React.FC = () => {
     addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
   };
 
-  //if (!user) return <Auth onLogin={setUser} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
+
 
   if (quotaError) {
     return (
@@ -577,8 +655,12 @@ const App: React.FC = () => {
                   className="w-full px-3 py-2 bg-[#0a0a0b] border border-slate-800 rounded-lg text-sm outline-none focus:ring-1 focus:ring-red-900 text-slate-300 placeholder-slate-700"
                 />
                 <div className="flex gap-2">
-                  <button onClick={handleSaveCustomKey} className="flex-1 bg-red-900 text-red-100 py-2 rounded-lg text-xs font-bold hover:bg-red-800 transition-colors border border-red-800">{t.saved}</button>
-                  {customApiKey && <button onClick={handleRemoveCustomKey} className="px-3 bg-slate-900 text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors border border-slate-800">{t.removeKey}</button>}
+                  <button onClick={handleSaveCustomKey} className="flex-1 bg-red-900 text-red-100 py-2 rounded-lg text-xs font-bold hover:bg-red-800 transition-colors border border-red-800">
+                    {t.setKey}
+                  </button>
+                  <button onClick={handleRemoveCustomKey} className="px-3 bg-slate-800 text-slate-400 rounded-lg text-xs font-bold hover:bg-slate-700 hover:text-white transition-colors border border-slate-700">
+                    {t.removeKey}
+                  </button>
                 </div>
               </div>
             )}
@@ -602,12 +684,6 @@ const App: React.FC = () => {
             </button>
           )}
           
-          <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border border-slate-800 rounded-full mr-2">
-            {user.avatar ? <img src={user.avatar} alt={user.name} className="w-6 h-6 rounded-full border border-slate-700" /> : <UserIcon size={16} className="text-slate-600" />}
-            <span className="text-xs font-black text-slate-500 uppercase tracking-tight">{user.name}</span>
-          </div>
-
-          <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-800 text-xs font-black text-slate-600 hover:bg-slate-800 hover:text-slate-300 transition-all uppercase"><LogOut size={16} />{t.logout}</button>
           <button onClick={() => downloadAsZip(scenes)} disabled={isProcessing || !scenes.some(s => s.variants.length > 0)} className="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-800 text-sm font-bold text-slate-500 hover:bg-slate-800 hover:text-slate-300 disabled:opacity-30 transition-all uppercase"><Download size={18} />{t.exportZip}</button>
         </div>
       </nav>
@@ -618,7 +694,13 @@ const App: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-slate-300"><Layout size={24} className="text-slate-600" /><h2 className="text-base font-black uppercase tracking-widest">{t.masterScript}</h2></div>
               <div className="flex items-center gap-2">
-                <button onClick={handleResetWorkspace} className="p-2 text-slate-600 hover:text-red-500 transition-colors" title={t.resetWorkspace}><Trash2 size={18} /></button>
+                <button 
+                  onClick={handleResetWorkspace} 
+                  className="flex items-center gap-2 px-3 py-1.5 bg-red-900/10 text-red-500 rounded-lg text-xs font-black uppercase hover:bg-red-900/20 transition-colors border border-red-900/20"
+                  title={t.resetWorkspace}
+                >
+                  <Trash2 size={14} /> {t.resetWorkspace}
+                </button>
                 <div className="bg-red-900/10 text-red-700 text-xs font-bold px-2.5 py-1 rounded-md border border-red-900/20">{t.scriptBadge}</div>
               </div>
             </div>
@@ -702,6 +784,14 @@ const App: React.FC = () => {
                   <div className="flex items-center gap-3"><Layers size={20} className="text-slate-600" /><label className="text-xs font-black text-slate-600 uppercase tracking-widest">{t.charEnsemble}</label></div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleAutoAnalyzeCharacters}
+                    disabled={isProcessing}
+                    className="flex items-center gap-2 text-xs font-black text-slate-300 bg-slate-800 px-4 py-2 rounded-full hover:bg-slate-700 transition-colors border border-slate-700 uppercase tracking-tighter disabled:opacity-50"
+                  >
+                    <Sparkles size={14} className="text-yellow-500" /> 
+                    {characters.length > 1 ? t.refreshAll : t.autoAnalyze}
+                  </button>
                   {characters.length < 12 && (
                     <button onClick={handleAddCharacter} className="flex items-center gap-2 text-xs font-black text-red-500 bg-red-900/10 px-4 py-2 rounded-full hover:bg-red-900/20 transition-colors border border-red-900/20 uppercase tracking-tighter">
                       <Plus size={16} /> {t.newSlot}
@@ -737,18 +827,28 @@ const App: React.FC = () => {
           {/* Bottom Action Bar */}
           <div className="sticky bottom-6 z-30">
              {!isProcessing ? (
-               <button onClick={startProduction} className="w-full flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-red-900 to-orange-800 text-red-50 text-lg font-black hover:from-red-800 hover:to-orange-700 shadow-2xl shadow-black/50 transition-all hover:-translate-y-1 uppercase tracking-wide border border-red-800/50 ring-1 ring-white/5">
-                 <Play size={24} fill="currentColor" className="text-red-200" />
-                 {t.startProduction}
-               </button>
+               <div className="flex gap-4">
+                 {scenes.length > 0 && scenes.some(s => s.status === 'idle' || s.status === 'error') ? (
+                   <button onClick={resumeProduction} className="flex-1 flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-800 text-blue-50 text-lg font-black hover:from-blue-800 hover:to-indigo-700 shadow-2xl shadow-black/50 transition-all hover:-translate-y-1 uppercase tracking-wide border border-blue-800/50 ring-1 ring-white/5">
+                     <Play size={24} fill="currentColor" className="text-blue-200" />
+                     {t.resumeProduction}
+                   </button>
+                 ) : (
+                   <button onClick={startProduction} className="w-full flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-red-900 to-orange-800 text-red-50 text-lg font-black hover:from-red-800 hover:to-orange-700 shadow-2xl shadow-black/50 transition-all hover:-translate-y-1 uppercase tracking-wide border border-red-800/50 ring-1 ring-white/5">
+                     <Play size={24} fill="currentColor" className="text-red-200" />
+                     {t.startProduction}
+                   </button>
+                 )}
+               </div>
              ) : (
                <div className="flex gap-4">
                  <div className="flex-1 flex items-center justify-center gap-3 px-8 py-5 rounded-2xl bg-slate-900 text-slate-500 text-lg font-black uppercase border border-slate-800">
                    <Sparkles className="animate-spin text-red-800" size={24} />
                    {t.running}
                  </div>
-                 <button onClick={stopProduction} className="px-8 py-5 rounded-2xl bg-slate-900 text-red-800 text-lg font-black hover:bg-slate-800 border border-slate-800 hover:border-red-900/30 transition-all uppercase">
+                 <button onClick={stopProduction} className="px-8 py-5 rounded-2xl bg-slate-900 text-red-800 text-lg font-black hover:bg-slate-800 border border-slate-800 hover:border-red-900/30 transition-all uppercase flex items-center gap-2" title={t.stopProduction}>
                    <Square size={24} fill="currentColor" />
+                   <span className="text-xs font-bold">{t.pauseProduction}</span>
                  </button>
                </div>
              )}

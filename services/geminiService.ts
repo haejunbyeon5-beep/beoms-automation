@@ -19,6 +19,46 @@ export const generateCharacterProfileImage = async (name: string, description: s
   return undefined;
 };
 
+export const analyzeScriptForCharacters = async (script: string): Promise<Character[]> => {
+  const ai = getAI();
+  const systemInstruction = `Analyze the script and extract up to 4 main characters.
+  Return a JSON array of objects with "name" and "description" keys.
+  "description" should be a concise visual description (appearance, clothing, age) based on the script.
+  Example: [{"name": "Hong Gil-dong", "description": "Young man in blue Hanbok, sharp eyes, holding a flute"}]`;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Script: ${script}`,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            name: { type: Type.STRING },
+            description: { type: Type.STRING }
+          },
+          required: ["name", "description"]
+        }
+      }
+    }
+  });
+
+  try {
+    const parsed = JSON.parse(response.text || "[]");
+    return parsed.map((c: any, index: number) => ({
+      id: Date.now().toString() + index,
+      name: c.name,
+      description: c.description
+    }));
+  } catch (e) {
+    console.error("Failed to parse character analysis", e);
+    return [];
+  }
+};
+
 export const autoSegmentScript = async (fullScript: string, targetCount: number): Promise<{ number: string, description: string }[]> => {
   const ai = getAI();
   const systemInstruction = `Divide script into exactly ${targetCount} scenes. CRITICAL: Start description with EXACT VERBATIM text from script. DO NOT SUMMARIZE.`;
