@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { Clapperboard, Key, Languages, Sun, Moon, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { Language, Theme } from '../types';
-import { validateApiKey, setStoredApiKey, getStoredApiKey } from '../services/geminiService';
 
 interface AuthProps {
   onLogin: () => void;
@@ -12,54 +11,50 @@ interface AuthProps {
   onToggleTheme: () => void;
 }
 
+const VALID_LICENSE_KEY = 'love';
+
 const AUTH_TRANSLATIONS = {
   en: {
     welcome: "Goosebumps Studio",
     subtitle: "AI Storyboard Production Engine",
-    apiKeyLabel: "Gemini API Key",
-    apiKeyPlaceholder: "Paste your Gemini API key here...",
-    connect: "Connect & Start",
-    validating: "Validating key...",
-    howToGet: "Get your API key from Google AI Studio",
-    invalidKey: "Invalid API key. Please check and try again.",
-    agreement: "Your API key is stored locally in your browser only. It is never sent to any server other than Google's API."
+    licenseLabel: "License Key",
+    licensePlaceholder: "Enter your license key...",
+    connect: "Verify & Start",
+    validating: "Verifying...",
+    invalidKey: "Invalid license key. Please check and try again.",
+    agreement: "Enter the license key provided by the administrator to access the studio."
   },
   ko: {
     welcome: "구스범스 스튜디오",
     subtitle: "AI 스토리보드 제작 엔진",
-    apiKeyLabel: "Gemini API 키",
-    apiKeyPlaceholder: "Gemini API 키를 붙여넣으세요...",
-    connect: "연결하고 시작하기",
-    validating: "키 검증 중...",
-    howToGet: "Google AI Studio에서 API 키 발급받기",
-    invalidKey: "유효하지 않은 API 키입니다. 확인 후 다시 시도해주세요.",
-    agreement: "API 키는 브라우저 로컬에만 저장됩니다. Google API 외 어떤 서버로도 전송되지 않습니다."
+    licenseLabel: "라이센스 키",
+    licensePlaceholder: "라이센스 키를 입력하세요...",
+    connect: "인증하고 시작하기",
+    validating: "인증 중...",
+    invalidKey: "유효하지 않은 라이센스 키입니다. 확인 후 다시 시도해주세요.",
+    agreement: "스튜디오에 접속하려면 관리자가 제공한 라이센스 키를 입력하세요."
   }
 };
 
 const Auth: React.FC<AuthProps> = ({ onLogin, lang, onToggleLang, theme, onToggleTheme }) => {
-  const [apiKey, setApiKey] = useState(getStoredApiKey() || '');
+  const [licenseKey, setLicenseKey] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   const [error, setError] = useState('');
   const t = AUTH_TRANSLATIONS[lang];
 
   const handleConnect = async () => {
-    if (!apiKey.trim()) return;
+    if (!licenseKey.trim()) return;
     setIsValidating(true);
     setError('');
-    
-    try {
-      const isValid = await validateApiKey(apiKey.trim());
-      if (isValid) {
-        setStoredApiKey(apiKey.trim());
-        onLogin();
-      } else {
-        setError(t.invalidKey);
-      }
-    } catch (e) {
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    if (licenseKey.trim().toLowerCase() === VALID_LICENSE_KEY) {
+      onLogin();
+    } else {
       setError(t.invalidKey);
     }
-    
+
     setIsValidating(false);
   };
 
@@ -104,14 +99,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, lang, onToggleLang, theme, onToggl
           <div className="space-y-5">
             <div className="text-left">
               <label className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2 block">
-                <Key size={12} className="inline mr-1.5" />{t.apiKeyLabel}
+                <Key size={12} className="inline mr-1.5" />{t.licenseLabel}
               </label>
               <input
                 type="password"
-                value={apiKey}
-                onChange={(e) => { setApiKey(e.target.value); setError(''); }}
+                value={licenseKey}
+                onChange={(e) => { setLicenseKey(e.target.value); setError(''); }}
                 onKeyDown={handleKeyDown}
-                placeholder={t.apiKeyPlaceholder}
+                placeholder={t.licensePlaceholder}
                 className="w-full px-5 py-4 bg-slate-50 dark:bg-[#0f0f1a] border-2 border-slate-200 dark:border-slate-700 rounded-2xl text-sm font-medium text-slate-900 dark:text-slate-100 outline-none focus:border-red-500 dark:focus:border-red-500 transition-colors"
               />
             </div>
@@ -125,7 +120,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, lang, onToggleLang, theme, onToggl
 
             <button 
               onClick={handleConnect}
-              disabled={isValidating || !apiKey.trim()}
+              disabled={isValidating || !licenseKey.trim()}
               className="w-full flex items-center justify-center gap-3 py-5 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-base font-black transition-all disabled:opacity-50 active:scale-[0.98] shadow-lg shadow-red-500/20 uppercase tracking-wider"
             >
               {isValidating ? (
@@ -140,15 +135,6 @@ const Auth: React.FC<AuthProps> = ({ onLogin, lang, onToggleLang, theme, onToggl
                 </>
               )}
             </button>
-
-            <a 
-              href="https://aistudio.google.com/apikey" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="block text-xs font-bold text-red-500 dark:text-red-400 hover:underline uppercase tracking-tight"
-            >
-              {t.howToGet} →
-            </a>
           </div>
 
           <div className="mt-10 pt-8 border-t border-slate-100 dark:border-slate-800">
@@ -163,3 +149,5 @@ const Auth: React.FC<AuthProps> = ({ onLogin, lang, onToggleLang, theme, onToggl
 };
 
 export default Auth;
+
+
