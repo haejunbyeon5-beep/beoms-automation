@@ -15,24 +15,22 @@ import {
   X,
   Image as ImageIcon,
   Square,
-  LogOut,
-  User as UserIcon,
+  Key,
   Zap,
   Scissors,
   RefreshCcw,
   Info,
-  Key,
-  ShieldCheck,
-  ExternalLink,
   AlertTriangle,
   Sun,
   Moon,
   Cpu,
   Trophy,
   Trash2,
-  Save
+  Save,
+  CheckCircle2,
+  XCircle
 } from 'lucide-react';
-import { Character, Scene, StylePreset, STYLE_PRESETS, AspectRatio, Language, User, SceneVariant, Theme, ImageQuality } from './types';
+import { Character, Scene, StylePreset, STYLE_PRESETS, AspectRatio, Language, SceneVariant, Theme, ImageQuality } from './types';
 import CharacterCard from './components/CharacterCard';
 import StatusMonitor from './components/StatusMonitor';
 import SceneGallery from './components/SceneGallery';
@@ -42,16 +40,18 @@ import {
   optimizePrompt, 
   generateSceneImage, 
   autoSegmentScript, 
-  generateCharacterProfileImage 
+  generateCharacterProfileImage,
+  getStoredApiKey,
+  setStoredApiKey,
+  removeStoredApiKey
 } from './services/geminiService';
 
-const PERSISTENCE_KEY = 'sb_workspace_data_v1';
+const PERSISTENCE_KEY = 'gb_workspace_data_v1';
 
 const TRANSLATIONS = {
   en: {
-    title: "DreamTube Studio",
-    pro: "Pro",
-    subtitle: "Ensemble Production Engine",
+    title: "Goosebumps Studio",
+    subtitle: "AI Storyboard Engine",
     exportZip: "EXPORT ZIP",
     startProduction: "START PRODUCTION",
     stopProduction: "STOP",
@@ -73,33 +73,27 @@ const TRANSLATIONS = {
     workspaceEmpty: "Workspace is empty",
     workspaceEmptyDesc: "Your storyboard frames will appear here once production starts.",
     stoppedLog: "⚠️ Production stopped by user.",
-    logout: "Logout",
     autoSegment: "AI Auto-Segment",
     targetScenes: "Target Frame Count",
     segmenting: "AI is analyzing script...",
     manualInfo: "Manual Mode: Split by numbers (1.) or empty lines between paragraphs.",
     retryFailed: "Retry All Failed",
-    apiKeyRequired: "Paid Project Key Required",
-    apiKeyDesc: "The 'Ultra' quality mode requires an API key from a Google Cloud project with billing enabled. Free-tier keys are not selectable in the dialog.",
-    connectKey: "Link Paid Project Key",
-    billingDocs: "Billing Help",
-    keyConnected: "Ultra Mode Active",
-    keyDisconnected: "Standard Mode",
     quotaErrorTitle: "Quota Exceeded",
     quotaErrorDesc: "You have reached your API limit. If you are using a free key, wait a few minutes. For higher limits, use a paid project key.",
     qualityLabel: "Production Quality",
-    qStandard: "Standard (Fast/Free)",
-    qPro: "Ultra (High-Res/Paid)",
-    qDescStandard: "Works with any Gemini key. Very fast.",
-    qDescPro: "Best detail. Requires billing-enabled project.",
     resetWorkspace: "Reset Workspace",
     confirmReset: "Are you sure? This will delete all generated images and text.",
-    saved: "Saved"
+    saved: "Saved",
+    apiKeyConnected: "API Connected",
+    apiKeyDisconnected: "No API Key",
+    apiKeyPlaceholder: "Enter Gemini API key...",
+    apiKeySave: "Save",
+    apiKeyDelete: "Delete",
+    apiKeyLabel: "API KEY"
   },
   ko: {
-    title: "몽상튜브 스튜디오",
-    pro: "프로",
-    subtitle: "앙상블 프로덕션 엔진",
+    title: "구스범스 스튜디오",
+    subtitle: "AI 스토리보드 엔진",
     exportZip: "ZIP 내보내기",
     startProduction: "제작 시작",
     stopProduction: "중지",
@@ -121,38 +115,33 @@ const TRANSLATIONS = {
     workspaceEmpty: "작업 공간이 비어 있습니다",
     workspaceEmptyDesc: "제작을 시작하면 스토리보드 프레임이 여기에 나타납니다.",
     stoppedLog: "⚠️ 사용자에 의해 제작이 중지되었습니다.",
-    logout: "로그아웃",
     autoSegment: "AI 자동 장면 분할",
     targetScenes: "목표 프레임(이미지) 갯수",
     segmenting: "AI가 대본을 분석하여 장면을 나누는 중...",
     manualInfo: "수동 모드: 숫자(1.) 또는 문단 사이 빈 줄로 구분됩니다.",
     retryFailed: "실패 항목 전체 재시도",
-    apiKeyRequired: "유료 프로젝트 키 필요",
-    apiKeyDesc: "'울트라' 고화질 모드는 결제가 활성화된 Google Cloud 프로젝트의 키가 필요합니다. 무료 등급 키는 연결 대화상자에서 선택할 수 없습니다.",
-    connectKey: "유료 프로젝트 키 연결",
-    billingDocs: "결제 안내",
-    keyConnected: "울트라 모드 활성",
-    keyDisconnected: "표준 모드",
     quotaErrorTitle: "API 할당량 초과",
     quotaErrorDesc: "API 호출 횟수를 모두 소모했습니다. 무료 키의 경우 몇 분 뒤에 다시 시도해주세요. 더 많은 양을 원하시면 유료 프로젝트 키를 사용하세요.",
     qualityLabel: "제작 품질 설정",
-    qStandard: "표준 (무료 가능/빠름)",
-    qPro: "울트라 (고화질/유료전용)",
-    qDescStandard: "모든 키에서 작동합니다. 속도가 매우 빠릅니다.",
-    qDescPro: "최고의 디테일을 제공합니다. 결제 계정 연결이 필요합니다.",
     resetWorkspace: "워크스페이스 초기화",
     confirmReset: "정말 초기화하시겠습니까? 생성된 모든 이미지와 텍스트가 삭제됩니다.",
-    saved: "저장됨"
+    saved: "저장됨",
+    apiKeyConnected: "API 연결됨",
+    apiKeyDisconnected: "API 미연결",
+    apiKeyPlaceholder: "Gemini API 키 입력...",
+    apiKeySave: "저장",
+    apiKeyDelete: "삭제",
+    apiKeyLabel: "API KEY"
   }
 };
 
 const ASPECT_RATIOS: AspectRatio[] = ['16:9', '4:3', '1:1', '9:16'];
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [lang, setLang] = useState<Language>('ko');
   const [theme, setTheme] = useState<Theme>(() => 
-    (localStorage.getItem('sb_theme') as Theme) || 
+    (localStorage.getItem('gb_theme') as Theme) || 
     (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   );
   
@@ -172,18 +161,24 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [zoomUrl, setZoomUrl] = useState<string | null>(null);
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [quotaError, setQuotaError] = useState(false);
   const [lastSaved, setLastSaved] = useState<number | null>(null);
+  
+  // API Key States
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [hasApiKey, setHasApiKey] = useState(false);
   
   const stopRequestedRef = useRef(false);
   const isInitialMount = useRef(true);
 
-  // Load Saved Data
+  // Check auth on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('sb_user');
-    if (savedUser) setUser(JSON.parse(savedUser));
-    checkApiKeyStatus();
+    const key = getStoredApiKey();
+    if (key) {
+      setIsAuthenticated(true);
+      setHasApiKey(true);
+    }
 
     const savedData = localStorage.getItem(PERSISTENCE_KEY);
     if (savedData) {
@@ -199,7 +194,6 @@ const App: React.FC = () => {
         setStyleRef(parsed.styleRef || null);
         setCharacters(parsed.characters || [{ id: '1', name: '' }]);
         setScenes(parsed.scenes || []);
-        addLog(lang === 'ko' ? "📁 이전 작업 상태를 복구했습니다." : "📁 Restored previous workspace state.");
       } catch (e) {
         console.error("Failed to restore data", e);
       }
@@ -214,49 +208,47 @@ const App: React.FC = () => {
     const timer = setTimeout(() => {
       try {
         const dataToSave = {
-          quality,
-          script,
-          targetSceneCount,
-          isAutoSegment,
-          stylePreset,
-          aspectRatio,
-          customStyle,
-          styleRef,
-          characters,
-          scenes
+          quality, script, targetSceneCount, isAutoSegment,
+          stylePreset, aspectRatio, customStyle, styleRef, characters, scenes
         };
         localStorage.setItem(PERSISTENCE_KEY, JSON.stringify(dataToSave));
         setLastSaved(Date.now());
       } catch (e: any) {
         if (e.name === 'QuotaExceededError') {
-          console.warn("Storage quota exceeded. Some images might not be saved.");
-          addLog("⚠️ " + (lang === 'ko' ? "저장 공간이 부족하여 일부 데이터가 저장되지 않을 수 있습니다." : "Storage quota exceeded."));
+          console.warn("Storage quota exceeded.");
+          addLog("⚠️ " + (lang === 'ko' ? "저장 공간이 부족합니다." : "Storage quota exceeded."));
         }
       }
     }, 1000);
-
     return () => clearTimeout(timer);
   }, [quality, script, targetSceneCount, isAutoSegment, stylePreset, aspectRatio, customStyle, styleRef, characters, scenes]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
-    localStorage.setItem('sb_theme', theme);
+    localStorage.setItem('gb_theme', theme);
   }, [theme]);
 
-  const checkApiKeyStatus = async () => {
-    const isSelected = await (window as any).aistudio.hasSelectedApiKey();
-    setHasApiKey(isSelected);
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      setStoredApiKey(apiKeyInput.trim());
+      setHasApiKey(true);
+      setShowApiKeyInput(false);
+      setApiKeyInput('');
+      addLog(lang === 'ko' ? "🔑 API 키가 저장되었습니다." : "🔑 API key saved.");
+    }
   };
 
-  const handleSelectKey = async () => {
-    try {
-      await (window as any).aistudio.openSelectKey();
-      const isSelected = await (window as any).aistudio.hasSelectedApiKey();
-      setHasApiKey(isSelected);
-      setQuotaError(false);
-    } catch (e) {
-      console.error("Failed to select key", e);
-    }
+  const handleDeleteApiKey = () => {
+    removeStoredApiKey();
+    setHasApiKey(false);
+    setShowApiKeyInput(false);
+    addLog(lang === 'ko' ? "🗑️ API 키가 삭제되었습니다." : "🗑️ API key removed.");
+  };
+
+  const handleLogout = () => {
+    removeStoredApiKey();
+    setIsAuthenticated(false);
+    setHasApiKey(false);
   };
 
   const handleResetWorkspace = () => {
@@ -272,24 +264,8 @@ const App: React.FC = () => {
     }
   };
 
-  const changeQuality = async (newQuality: ImageQuality) => {
-    if (newQuality === 'pro') {
-      const isSelected = await (window as any).aistudio.hasSelectedApiKey();
-      if (!isSelected) {
-        await handleSelectKey();
-        const confirmed = await (window as any).aistudio.hasSelectedApiKey();
-        if (!confirmed) {
-          addLog("⚠️ " + (lang === 'ko' ? '울트라 모드를 위해 유료 키 연결이 필요합니다. 표준 모드로 유지합니다.' : 'Ultra mode needs a paid key. Staying on Standard.'));
-          return;
-        }
-      }
-    }
+  const changeQuality = (newQuality: ImageQuality) => {
     setQuality(newQuality);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('sb_user');
-    setUser(null);
   };
 
   const t = TRANSLATIONS[lang];
@@ -311,9 +287,6 @@ const App: React.FC = () => {
       addLog(`🚨 ${scenePrefix}${lang === 'ko' ? 'API 할당량 초과! 잠시 후 시도하거나 유료 키를 사용하세요.' : 'Quota Exceeded! Wait a bit or use a paid key.'}`);
     } else if (error.message?.includes("Requested entity was not found")) {
       addLog(`🚨 ${scenePrefix}${lang === 'ko' ? '현재 모델은 무료 키로 사용할 수 없습니다. "표준" 품질로 낮춰보세요.' : 'Selected model is not available for free keys. Try "Standard" quality.'}`);
-      if (quality === 'pro') {
-        setHasApiKey(false);
-      }
     } else {
       addLog(`❌ ${scenePrefix}FAILED: ${error.message || 'Unknown error'}`);
     }
@@ -325,13 +298,8 @@ const App: React.FC = () => {
     
     try {
       const imageUrl = await generateCharacterProfileImage(
-        targetChar.name, 
-        targetChar.description || "", 
-        stylePreset, 
-        customStyle,
-        quality
+        targetChar.name, targetChar.description || "", stylePreset, customStyle, quality
       );
-      
       setCharacters(prev => prev.map(c => 
         c.id === targetChar.id 
           ? { ...c, image: imageUrl || c.image, mimeType: imageUrl ? 'image/png' : c.mimeType, isGenerating: false } 
@@ -398,15 +366,12 @@ const App: React.FC = () => {
   const handleRetryFailed = async () => {
     const failedScenes = scenes.filter(s => s.status === 'error');
     if (failedScenes.length === 0) return;
-    
     setIsProcessing(true);
     addLog(`🔄 ${lang === 'ko' ? '실패 항목 재시도' : 'Retrying failed scenes'}: ${failedScenes.length} scenes.`);
-    
     for (const scene of failedScenes) {
       if (stopRequestedRef.current) break;
       await generateSingleScene(scene);
     }
-    
     setIsProcessing(false);
   };
 
@@ -418,6 +383,7 @@ const App: React.FC = () => {
 
   const startProduction = async () => {
     if (!script.trim()) return alert(lang === 'ko' ? '스크립트를 입력해주세요.' : 'Script is empty.');
+    if (!hasApiKey) return alert(lang === 'ko' ? 'API 키를 먼저 입력해주세요.' : 'Please enter your API key first.');
     
     setIsProcessing(true);
     stopRequestedRef.current = false;
@@ -432,12 +398,9 @@ const App: React.FC = () => {
           const firstSentence = seg.description.split(/[.!?\n]/).find(s => s.trim().length > 0) || 'scene';
           const cleanTitle = firstSentence.replace(/[\\/:*?"<>|]/g, '').trim().slice(0, 60);
           return {
-            id: Math.random().toString(36).substr(2, 9),
-            number: seg.number,
-            description: seg.description,
-            filename: `${seg.number}_${cleanTitle}.png`,
-            status: 'idle',
-            variants: []
+            id: Math.random().toString(36).substr(2, 9), number: seg.number,
+            description: seg.description, filename: `${seg.number}_${cleanTitle}.png`,
+            status: 'idle', variants: []
           };
         });
       } catch (e: any) {
@@ -466,31 +429,23 @@ const App: React.FC = () => {
     addLog(`✅ ${lang === 'ko' ? '모든 프로세스 종료' : 'All processes ended'}.`);
   };
 
-  if (!user) return <Auth onLogin={setUser} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
+  if (!isAuthenticated) return <Auth onLogin={() => setIsAuthenticated(true)} lang={lang} onToggleLang={toggleLanguage} theme={theme} onToggleTheme={toggleTheme} />;
 
   if (quotaError) {
     return (
-      <div className="min-h-screen bg-[#F9FBFF] dark:bg-slate-950 flex items-center justify-center p-6 transition-colors">
-        <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-2xl p-10 text-center">
+      <div className="min-h-screen bg-[#F9FBFF] dark:bg-[#0a0a0f] flex items-center justify-center p-6 transition-colors">
+        <div className="max-w-md w-full bg-white dark:bg-[#1a1a2e] rounded-[2.5rem] border border-slate-200 dark:border-red-900/30 shadow-2xl p-10 text-center">
           <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-8">
             <AlertTriangle size={40} />
           </div>
           <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100 mb-4 uppercase tracking-tight">{t.quotaErrorTitle}</h1>
           <p className="text-base text-slate-500 dark:text-slate-400 mb-8 leading-relaxed font-medium">{t.quotaErrorDesc}</p>
-          
           <div className="flex flex-col gap-3">
             <button 
               onClick={() => { setQuotaError(false); setQuality('standard'); }}
               className="w-full bg-slate-900 dark:bg-slate-700 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               {lang === 'ko' ? '표준 모드로 계속하기' : 'Continue in Standard Mode'}
-            </button>
-            <button 
-              onClick={handleSelectKey}
-              className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 shadow-xl shadow-blue-100 dark:shadow-none transition-all active:scale-[0.98]"
-            >
-              <RefreshCcw size={20} />
-              {lang === 'ko' ? '유료 키로 다시 시도' : 'Try Paid Project Key'}
             </button>
           </div>
         </div>
@@ -499,20 +454,41 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F9FBFF] dark:bg-slate-950 transition-colors">
+    <div className="min-h-screen flex flex-col bg-[#F9FBFF] dark:bg-[#0a0a0f] transition-colors">
       {zoomUrl && (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomUrl(null)}>
-          <button className="absolute top-6 right-6 text-white hover:text-blue-400"><X size={32} /></button>
+          <button className="absolute top-6 right-6 text-white hover:text-red-400"><X size={32} /></button>
           <img src={zoomUrl} alt="Zoomed" className="max-w-full max-h-full rounded-lg shadow-2xl object-contain" />
         </div>
       )}
 
-      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-8 py-5 flex items-center justify-between shadow-sm transition-colors">
+      {/* API Key Modal */}
+      {showApiKeyInput && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowApiKeyInput(false)}>
+          <div className="bg-white dark:bg-[#1a1a2e] rounded-2xl border border-slate-200 dark:border-slate-700 p-8 max-w-md w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-black text-slate-900 dark:text-slate-100 mb-4 uppercase">{t.apiKeyLabel}</h3>
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={t.apiKeyPlaceholder}
+              className="w-full px-4 py-3 bg-slate-50 dark:bg-[#0f0f1a] border-2 border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-slate-100 outline-none focus:border-red-500 mb-4"
+            />
+            <div className="flex gap-3">
+              <button onClick={handleSaveApiKey} className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-black text-sm uppercase transition-all">{t.apiKeySave}</button>
+              <button onClick={handleDeleteApiKey} className="px-5 py-3 bg-slate-100 dark:bg-slate-800 text-red-500 rounded-xl font-black text-sm uppercase transition-all">{t.apiKeyDelete}</button>
+              <button onClick={() => setShowApiKeyInput(false)} className="px-5 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-xl font-black text-sm uppercase transition-all">✕</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="bg-white dark:bg-[#12121e] border-b border-slate-200 dark:border-red-900/20 sticky top-0 z-40 px-8 py-5 flex items-center justify-between shadow-sm transition-colors">
         <div className="flex items-center gap-4">
-          <div className="bg-slate-900 dark:bg-blue-600 text-white p-3 rounded-xl shadow-xl shadow-slate-200 dark:shadow-none"><Clapperboard size={24} /></div>
+          <div className="bg-red-600 text-white p-3 rounded-xl shadow-xl shadow-red-500/20"><Clapperboard size={24} /></div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase">{t.title} <span className="text-blue-600 dark:text-blue-400">{t.pro}</span></h1>
+              <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white uppercase">{t.title}</h1>
               {lastSaved && (
                 <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase transition-all">
                   <Save size={10} /> {t.saved}
@@ -545,27 +521,20 @@ const App: React.FC = () => {
             {quality === 'pro' ? 'Ultra (Paid)' : 'Standard (Free)'}
           </button>
 
-          {quality === 'pro' && (
-            <button 
-              onClick={handleSelectKey}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-full text-xs font-black text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors uppercase tracking-tight"
-            >
-              <ShieldCheck size={16} />
-              {hasApiKey ? t.keyConnected : t.connectKey}
-            </button>
-          )}
-          
-          <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-full mr-2">
-            {user.avatar ? <img src={user.avatar} alt={user.name} className="w-6 h-6 rounded-full border border-blue-200 dark:border-blue-500" /> : <UserIcon size={16} className="text-blue-500" />}
-            <span className="text-xs font-black text-slate-600 dark:text-slate-300 uppercase tracking-tight">{user.name}</span>
-          </div>
+          {/* API Key Button */}
+          <button 
+            onClick={() => setShowApiKeyInput(true)}
+            className={`flex items-center gap-2 px-4 py-2 border rounded-full text-xs font-black transition-all uppercase tracking-tight ${hasApiKey ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-600 dark:text-red-400'}`}
+          >
+            {hasApiKey ? <CheckCircle2 size={16} /> : <Key size={16} />}
+            {hasApiKey ? t.apiKeyConnected : t.apiKeyDisconnected}
+          </button>
 
-          <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-100 dark:border-red-900/30 text-xs font-black text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all uppercase"><LogOut size={16} />{t.logout}</button>
           <button onClick={() => downloadAsZip(scenes)} disabled={isProcessing || !scenes.some(s => s.variants.length > 0)} className="flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-30 transition-all uppercase"><Download size={18} />{t.exportZip}</button>
           
           <div className="flex items-center gap-2">
             {!isProcessing ? (
-              <button onClick={startProduction} className="flex items-center gap-2 px-10 py-3 rounded-xl bg-blue-600 text-white text-sm font-black hover:bg-blue-700 shadow-lg shadow-blue-100 dark:shadow-none transition-all hover:-translate-y-0.5 uppercase"><Play size={18} />{t.startProduction}</button>
+              <button onClick={startProduction} className="flex items-center gap-2 px-10 py-3 rounded-xl bg-red-600 text-white text-sm font-black hover:bg-red-700 shadow-lg shadow-red-500/20 transition-all hover:-translate-y-0.5 uppercase"><Play size={18} />{t.startProduction}</button>
             ) : (
               <div className="flex items-center gap-2">
                 <div className="flex items-center gap-2 px-8 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-sm font-black uppercase"><Sparkles className="animate-spin" size={18} />{t.running}</div>
@@ -578,44 +547,42 @@ const App: React.FC = () => {
 
       <main className="flex-1 max-w-[1700px] mx-auto w-full p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-4 flex flex-col gap-6">
-          <section className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 flex flex-col gap-6 transition-colors">
+          <section className="bg-white dark:bg-[#1a1a2e] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 flex flex-col gap-6 transition-colors">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Layout size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.masterScript}</h2></div>
+              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Layout size={24} className="text-red-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.masterScript}</h2></div>
               <div className="flex items-center gap-2">
                 <button onClick={handleResetWorkspace} className="p-2 text-slate-400 hover:text-red-500 transition-colors" title={t.resetWorkspace}><Trash2 size={18} /></button>
-                <div className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-bold px-2.5 py-1 rounded-md">{t.scriptBadge}</div>
+                <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-bold px-2.5 py-1 rounded-md">{t.scriptBadge}</div>
               </div>
             </div>
-            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700">
+            <div className="flex items-center justify-between p-5 bg-slate-50 dark:bg-[#12121e] rounded-2xl border border-slate-100 dark:border-slate-700">
               <div className="flex items-center gap-4">
-                <div className={`p-2.5 rounded-lg ${isAutoSegment ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 dark:shadow-none' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}><Scissors size={20} /></div>
+                <div className={`p-2.5 rounded-lg ${isAutoSegment ? 'bg-red-500 text-white shadow-lg shadow-red-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}><Scissors size={20} /></div>
                 <div><h3 className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-tight">{t.autoSegment}</h3><p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Gemini Intelligence</p></div>
               </div>
-              <button onClick={() => setIsAutoSegment(!isAutoSegment)} className={`w-14 h-7 rounded-full transition-colors relative ${isAutoSegment ? 'bg-blue-500' : 'bg-slate-300 dark:bg-slate-700'}`}><div className={`absolute top-1 bg-white w-5 h-5 rounded-full transition-all ${isAutoSegment ? 'left-8' : 'left-1'}`} /></button>
+              <button onClick={() => setIsAutoSegment(!isAutoSegment)} className={`w-14 h-7 rounded-full transition-colors relative ${isAutoSegment ? 'bg-red-500' : 'bg-slate-300 dark:bg-slate-700'}`}><div className={`absolute top-1 bg-white w-5 h-5 rounded-full transition-all ${isAutoSegment ? 'left-8' : 'left-1'}`} /></button>
             </div>
             <div className="relative group">
               <textarea
-                className="w-full h-[350px] p-6 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none text-base font-medium leading-relaxed resize-none shadow-inner"
+                className="w-full h-[350px] p-6 bg-white dark:bg-[#0f0f1a] text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-base font-medium leading-relaxed resize-none shadow-inner"
                 placeholder={t.scriptPlaceholder}
                 value={script}
                 onChange={(e) => setScript(e.target.value)}
               />
             </div>
             {isAutoSegment ? (
-              <div className="space-y-5 p-5 bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/20">
-                <div className="flex items-center justify-between"><label className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} /> {t.targetScenes}</label><span className="bg-blue-600 dark:bg-blue-500 text-white text-sm font-black px-3 py-1.5 rounded-lg shadow-md">{targetSceneCount}</span></div>
+              <div className="space-y-5 p-5 bg-red-50/50 dark:bg-red-900/10 rounded-2xl border border-red-100 dark:border-red-900/20">
+                <div className="flex items-center justify-between"><label className="text-xs font-black text-red-600 dark:text-red-400 uppercase tracking-widest flex items-center gap-2"><Zap size={14} /> {t.targetScenes}</label><span className="bg-red-600 dark:bg-red-500 text-white text-sm font-black px-3 py-1.5 rounded-lg shadow-md">{targetSceneCount}</span></div>
                 <div className="flex items-center gap-4">
-                  <button onClick={() => setTargetSceneCount(Math.max(1, targetSceneCount - 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg"><Minus size={18} /></button>
-                  <input type="range" min="1" max="100" value={targetSceneCount} onChange={(e) => setTargetSceneCount(parseInt(e.target.value))} className="flex-1 accent-blue-600" />
-                  <button onClick={() => setTargetSceneCount(Math.min(100, targetSceneCount + 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg"><Plus size={18} /></button>
+                  <button onClick={() => setTargetSceneCount(Math.max(1, targetSceneCount - 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-lg"><Minus size={18} /></button>
+                  <input type="range" min="1" max="100" value={targetSceneCount} onChange={(e) => setTargetSceneCount(parseInt(e.target.value))} className="flex-1 accent-red-600" />
+                  <button onClick={() => setTargetSceneCount(Math.min(100, targetSceneCount + 1))} className="p-2.5 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-lg"><Plus size={18} /></button>
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2.5 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                <Info size={16} className="text-blue-500 shrink-0" />
-                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight leading-tight">
-                  {t.manualInfo}
-                </p>
+              <div className="flex items-center gap-2.5 p-4 bg-slate-50 dark:bg-[#12121e] rounded-xl border border-slate-100 dark:border-slate-700">
+                <Info size={16} className="text-red-500 shrink-0" />
+                <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-tight leading-tight">{t.manualInfo}</p>
               </div>
             )}
           </section>
@@ -623,13 +590,13 @@ const App: React.FC = () => {
         </div>
 
         <div className="lg:col-span-8 flex flex-col gap-8">
-          <section className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 space-y-8 transition-colors">
+          <section className="bg-white dark:bg-[#1a1a2e] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 space-y-8 transition-colors">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Settings2 size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.visualDirection}</h2></div>
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Settings2 size={24} className="text-red-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.visualDirection}</h2></div>
+              <div className="flex bg-slate-100 dark:bg-[#12121e] p-1 rounded-xl">
                 <button 
                   onClick={() => changeQuality('standard')}
-                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'standard' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-400'}`}
+                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'standard' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-400'}`}
                 >
                   Standard
                 </button>
@@ -645,17 +612,17 @@ const App: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-7">
                 <div className="space-y-4"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.artStyle}</label>
-                  <div className="grid grid-cols-2 gap-3">{STYLE_PRESETS.map((p) => (<button key={p} onClick={() => setStylePreset(p)} className={`px-5 py-4 rounded-xl text-xs font-black border-2 transition-all ${stylePreset === p ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}>{p}</button>))}</div>
+                  <div className="grid grid-cols-3 gap-3">{STYLE_PRESETS.map((p) => (<button key={p} onClick={() => setStylePreset(p)} className={`px-4 py-4 rounded-xl text-xs font-black border-2 transition-all ${stylePreset === p ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-700 dark:text-red-400' : 'bg-white dark:bg-[#0f0f1a] border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}>{p}</button>))}</div>
                 </div>
                 <div className="space-y-4"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.aspectRatio}</label>
-                  <div className="flex gap-3">{ASPECT_RATIOS.map((r) => (<button key={r} onClick={() => setAspectRatio(r)} className={`flex-1 py-4 rounded-xl text-xs font-black border-2 transition-all flex items-center justify-center gap-2 ${aspectRatio === r ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-400' : 'bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}><Maximize size={16} className={r === '9:16' ? 'rotate-90' : ''} />{r}</button>))}</div>
+                  <div className="flex gap-3">{ASPECT_RATIOS.map((r) => (<button key={r} onClick={() => setAspectRatio(r)} className={`flex-1 py-4 rounded-xl text-xs font-black border-2 transition-all flex items-center justify-center gap-2 ${aspectRatio === r ? 'bg-red-50 dark:bg-red-900/20 border-red-500 text-red-700 dark:text-red-400' : 'bg-white dark:bg-[#0f0f1a] border-slate-100 dark:border-slate-800 text-slate-500 dark:text-slate-500'}`}><Maximize size={16} className={r === '9:16' ? 'rotate-90' : ''} />{r}</button>))}</div>
                 </div>
               </div>
               <div className="space-y-5"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.atmosphere}</label>
-                <div className="flex flex-col gap-5"><textarea placeholder={t.atmospherePlaceholder} className="w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-4 text-sm outline-none h-[110px] focus:ring-2 focus:ring-blue-500/20" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} />
+                <div className="flex flex-col gap-5"><textarea placeholder={t.atmospherePlaceholder} className="w-full bg-slate-50 dark:bg-[#0f0f1a] text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 rounded-xl px-5 py-4 text-sm outline-none h-[110px] focus:ring-2 focus:ring-red-500/20" value={customStyle} onChange={(e) => setCustomStyle(e.target.value)} />
                   <div className="space-y-3"><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.styleRefLabel}</label>
                     <div className="relative group">{styleRef ? (<div className="relative h-24 w-full rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800"><img src={styleRef.data} alt="Ref" className="w-full h-full object-cover" /><button onClick={() => setStyleRef(null)} className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg"><X size={14} /></button></div>) : (
-                      <label className="h-24 w-full border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-4 text-slate-400 dark:text-slate-600 cursor-pointer hover:border-blue-400 transition-colors"><ImageIcon size={24} /><div className="flex flex-col"><span className="text-xs font-bold uppercase">{t.styleRefLabel}</span><span className="text-[10px] uppercase">{t.styleRefDesc}</span></div><input type="file" className="hidden" accept="image/*" onChange={handleStyleRefUpload} /></label>)}
+                      <label className="h-24 w-full border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-center gap-4 text-slate-400 dark:text-slate-600 cursor-pointer hover:border-red-400 transition-colors"><ImageIcon size={24} /><div className="flex flex-col"><span className="text-xs font-bold uppercase">{t.styleRefLabel}</span><span className="text-[10px] uppercase">{t.styleRefDesc}</span></div><input type="file" className="hidden" accept="image/*" onChange={handleStyleRefUpload} /></label>)}
                     </div>
                   </div>
                 </div>
@@ -664,11 +631,11 @@ const App: React.FC = () => {
             <div className="pt-6 border-t border-slate-50 dark:border-slate-800">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-3"><Layers size={20} className="text-blue-500" /><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.charEnsemble}</label></div>
+                  <div className="flex items-center gap-3"><Layers size={20} className="text-red-500" /><label className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">{t.charEnsemble}</label></div>
                 </div>
                 <div className="flex items-center gap-2">
                   {characters.length < 12 && (
-                    <button onClick={handleAddCharacter} className="flex items-center gap-2 text-xs font-black text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors border border-blue-100 dark:border-blue-900/30 uppercase tracking-tighter">
+                    <button onClick={handleAddCharacter} className="flex items-center gap-2 text-xs font-black text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-4 py-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors border border-red-100 dark:border-red-900/30 uppercase tracking-tighter">
                       <Plus size={16} /> {t.newSlot}
                     </button>
                   )}
@@ -689,14 +656,14 @@ const App: React.FC = () => {
           </section>
 
           <section className="space-y-7">
-            <div className="flex items-center justify-between"><div className="flex items-center gap-3 text-slate-900 dark:text-white"><Clapperboard size={24} className="text-blue-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.storyboardOutput}</h2></div><div className="flex items-center gap-5">{scenes.some(s => s.status === 'error') && (<button onClick={handleRetryFailed} className="flex items-center gap-2 px-5 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-full border border-amber-100 dark:border-amber-900/30 text-xs font-black uppercase"><RefreshCcw size={14} />{t.retryFailed}</button>)}{scenes.length > 0 && (<span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">{scenes.length} {t.framesGenerated}</span>)}</div></div>
+            <div className="flex items-center justify-between"><div className="flex items-center gap-3 text-slate-900 dark:text-white"><Clapperboard size={24} className="text-red-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.storyboardOutput}</h2></div><div className="flex items-center gap-5">{scenes.some(s => s.status === 'error') && (<button onClick={handleRetryFailed} className="flex items-center gap-2 px-5 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 rounded-full border border-amber-100 dark:border-amber-900/30 text-xs font-black uppercase"><RefreshCcw size={14} />{t.retryFailed}</button>)}{scenes.length > 0 && (<span className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase">{scenes.length} {t.framesGenerated}</span>)}</div></div>
             {scenes.length > 0 ? (<SceneGallery scenes={scenes} onRegenerate={handleRegenerateScene} onZoom={setZoomUrl} isProcessing={isProcessing} />) : (
-              <div className="bg-white dark:bg-slate-900 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 py-28 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 gap-5 transition-colors"><div className="bg-slate-50 dark:bg-slate-800 p-8 rounded-full"><Layout size={48} className="opacity-20" /></div><div className="text-center"><p className="text-base font-bold text-slate-500 dark:text-slate-400">{t.workspaceEmpty}</p><p className="text-sm">{t.workspaceEmptyDesc}</p></div></div>
+              <div className="bg-white dark:bg-[#1a1a2e] rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 py-28 flex flex-col items-center justify-center text-slate-400 dark:text-slate-600 gap-5 transition-colors"><div className="bg-slate-50 dark:bg-[#12121e] p-8 rounded-full"><Layout size={48} className="opacity-20" /></div><div className="text-center"><p className="text-base font-bold text-slate-500 dark:text-slate-400">{t.workspaceEmpty}</p><p className="text-sm">{t.workspaceEmptyDesc}</p></div></div>
             )}
           </section>
         </div>
       </main>
-      <footer className="bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 py-10 px-8 text-center mt-12 transition-colors"><p className="text-xs text-slate-400 dark:text-slate-600 font-black uppercase tracking-[0.3em]">&copy; 2025 AI Ensemble Studio & Precision Visualization Engine</p></footer>
+      <footer className="bg-white dark:bg-[#12121e] border-t border-slate-100 dark:border-slate-800 py-10 px-8 text-center mt-12 transition-colors"><p className="text-xs text-slate-400 dark:text-slate-600 font-black uppercase tracking-[0.3em]">&copy; 2025 Goosebumps Studio — AI Storyboard Engine</p></footer>
     </div>
   );
 };

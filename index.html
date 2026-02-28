@@ -1,13 +1,11 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>몽상튜브 스튜디오 - DreamTube Studio</title>
+    <title>구스범스 스튜디오 - Goosebumps Studio</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Tailwind CSS 다크 모드 설정을 'class'로 지정합니다.
       tailwind.config = {
         darkMode: 'class',
         theme: {
@@ -24,41 +22,17 @@
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        /* 기본 배경색을 제거하거나 다크 모드 전역 클래스에 맡깁니다. */
         margin: 0;
         padding: 0;
       }
-      /* 스크롤바 커스텀 (다크 모드 대응) */
-      .dark ::-webkit-scrollbar {
-        width: 10px;
-      }
-      .dark ::-webkit-scrollbar-track {
-        background: #0f172a;
-      }
-      .dark ::-webkit-scrollbar-thumb {
-        background: #334155;
-        border-radius: 5px;
-      }
-      .dark ::-webkit-scrollbar-thumb:hover {
-        background: #475569;
-      }
+      .dark ::-webkit-scrollbar { width: 10px; }
+      .dark ::-webkit-scrollbar-track { background: #0a0a0f; }
+      .dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; }
+      .dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.35.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "jszip": "https://esm.sh/jszip@^3.10.1"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-</head>
-  <body class="bg-[#F9FBFF] dark:bg-slate-950 transition-colors duration-300">
+  </head>
+  <body class="bg-[#F9FBFF] dark:bg-[#0a0a0f] transition-colors duration-300">
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
