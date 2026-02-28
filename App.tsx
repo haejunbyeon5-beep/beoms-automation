@@ -27,8 +27,7 @@ import {
   Trophy,
   Trash2,
   Save,
-  CheckCircle2,
-  XCircle
+  CheckCircle2
 } from 'lucide-react';
 import { Character, Scene, StylePreset, STYLE_PRESETS, AspectRatio, Language, SceneVariant, Theme, ImageQuality } from './types';
 import CharacterCard from './components/CharacterCard';

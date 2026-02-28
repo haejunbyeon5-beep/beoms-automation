@@ -1,25 +1,72 @@
 
-import { GoogleGenAI, GenerateContentResponse, Part, Type } from "@google/genai";
-import { Character, Scene, AspectRatio, ImageQuality } from "../types";
+import { GoogleGenAI, Part, Type } from "@google/genai";
+import { Character, AspectRatio, ImageQuality, StylePreset, STYLE_PROMPT_MAP } from "../types";
 
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+const API_KEY_STORAGE = 'gb_studio_api_key';
+
+export const getStoredApiKey = (): string | null => {
+  return localStorage.getItem(API_KEY_STORAGE);
+};
+
+export const setStoredApiKey = (key: string): void => {
+  localStorage.setItem(API_KEY_STORAGE, key);
+};
+
+export const removeStoredApiKey = (): void => {
+  localStorage.removeItem(API_KEY_STORAGE);
+};
+
+export const validateApiKey = async (key: string): Promise<boolean> => {
+  try {
+    const ai = new GoogleGenAI({ apiKey: key });
+    await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: 'Hello',
+      config: { maxOutputTokens: 10 }
+    });
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
+
+const getAI = () => {
+  const key = getStoredApiKey();
+  if (!key) throw new Error('API 키가 설정되지 않았습니다. 먼저 API 키를 입력해주세요.');
+  return new GoogleGenAI({ apiKey: key });
+};
+
+/**
+ * 스타일 프롬프트를 생성합니다. STYLE_PROMPT_MAP에 상세 매핑이 있으면 사용하고, 없으면 프리셋 이름 그대로 반환합니다.
+ */
+const getStyleInstruction = (stylePreset: StylePreset): string => {
+  const mapping = STYLE_PROMPT_MAP[stylePreset];
+  if (mapping && mapping.positive) {
+    let instruction = mapping.positive;
+    if (mapping.negative) {
+      instruction += ` | AVOID: ${mapping.negative}`;
+    }
+    return instruction;
+  }
+  return stylePreset;
+};
 
 /**
  * 캐릭터 프로필 이미지 생성
- * @param quality 'standard'는 flash 모델, 'pro'는 pro 이미지 모델 사용
  */
 export const generateCharacterProfileImage = async (
   name: string, 
   description: string, 
-  stylePreset: string, 
+  stylePreset: StylePreset, 
   customStyle: string,
   quality: ImageQuality = 'standard'
 ): Promise<string | undefined> => {
   const ai = getAI();
   const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const styleInstruction = getStyleInstruction(stylePreset);
   
   const prompt = `A professional high-quality character concept profile portrait of "${name}". 
-  Art Style: ${stylePreset}. 
+  Art Style: ${styleInstruction}. 
   Atmosphere/Lighting: ${customStyle || 'Studio lighting'}.
   Physical appearance & Costume: ${description}. 
   Close-up portrait, looking at camera, high detail, 1:1 aspect ratio.`;
@@ -87,11 +134,12 @@ export const autoSegmentScript = async (
 
 export const optimizePrompt = async (
   sceneContent: string,
-  stylePreset: string,
+  stylePreset: StylePreset,
   customStyle: string,
   characters: Character[]
 ): Promise<string> => {
   const ai = getAI();
+  const styleInstruction = getStyleInstruction(stylePreset);
   
   const charContext = characters
     .filter(c => c.name)
@@ -101,8 +149,8 @@ export const optimizePrompt = async (
   const systemInstruction = `You are a world-class storyboard artist and image prompting expert. 
   Transform the scene description into a professional English image generation prompt.
   
-  STYLE LOCK:
-  - Art Style: ${stylePreset}
+  STYLE LOCK (CRITICAL - MUST FOLLOW):
+  - Art Style: ${styleInstruction}
   - Atmosphere: ${customStyle || 'Cinematic, professional lighting'}
   
   CHARACTER IDENTITY LOCK:
@@ -146,7 +194,7 @@ export const generateSceneImage = async (
     });
 
   if (styleRef) {
-    parts.push({ text: "VISUAL STYLE AND LIGHTING REFERENCE:" });
+    parts.push({ text: `CRITICAL STYLE INSTRUCTION: You MUST exactly replicate the art style, color palette, line work, shading technique, and overall visual aesthetic of this reference image. Every generated scene must look like it belongs to the same artist and series as this reference. VISUAL STYLE AND LIGHTING REFERENCE:` });
     parts.push({
       inlineData: {
         data: styleRef.data.split(',')[1] || styleRef.data,
