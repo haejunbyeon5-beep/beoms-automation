@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Part, Type } from "@google/genai";
-import { Character, AspectRatio, ImageQuality, StylePreset, STYLE_PROMPT_MAP } from "../types";
+import { Character, AspectRatio, ImageModel, StylePreset, STYLE_PROMPT_MAP } from "../types";
 
 const API_KEY_STORAGE = 'gb_studio_api_key';
 
@@ -59,10 +59,10 @@ export const generateCharacterProfileImage = async (
   description: string, 
   stylePreset: StylePreset, 
   customStyle: string,
-  quality: ImageQuality = 'standard'
+  imageModel: ImageModel = 'gemini-3.1-flash-image-preview'
 ): Promise<string | undefined> => {
   const ai = getAI();
-  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const model = imageModel;
   const styleInstruction = getStyleInstruction(stylePreset);
   
   const prompt = `A professional high-quality character concept profile portrait of "${name}". 
@@ -77,9 +77,14 @@ export const generateCharacterProfileImage = async (
     config: {
       imageConfig: {
         aspectRatio: "1:1",
-        imageSize: "1K"
+        ...(model !== 'gemini-2.0-flash' && { imageSize: "1K" })
       }
     }
+  }).catch((e: any) => {
+    if (e.message?.includes('403') || e.message?.toLowerCase().includes('permission denied')) {
+        throw new Error("이 이미지 모델은 유료 API 키가 필요합니다. 무료 모델(2.0 Flash)을 선택하거나 유료 API 키를 사용해주세요.");
+    }
+    throw e;
   });
 
   for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -175,10 +180,10 @@ export const generateSceneImage = async (
   characters: Character[],
   aspectRatio: AspectRatio = "16:9",
   styleRef?: { data: string, mimeType: string },
-  quality: ImageQuality = 'standard'
+  imageModel: ImageModel = 'gemini-3.1-flash-image-preview'
 ): Promise<string | undefined> => {
   const ai = getAI();
-  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const model = imageModel;
   const parts: Part[] = [];
 
   characters
@@ -211,9 +216,14 @@ export const generateSceneImage = async (
     config: {
       imageConfig: {
         aspectRatio: aspectRatio,
-        imageSize: quality === 'pro' ? "1K" : undefined
+        ...(imageModel !== 'gemini-2.0-flash' && { imageSize: imageModel === 'gemini-3-pro-image-preview' ? "1K" : undefined })
       }
     }
+  }).catch((e: any) => {
+    if (e.message?.includes('403') || e.message?.toLowerCase().includes('permission denied')) {
+        throw new Error("이 이미지 모델은 유료 API 키가 필요합니다. 무료 모델(2.0 Flash)을 선택하거나 유료 API 키를 사용해주세요.");
+    }
+    throw e;
   });
 
   for (const part of response.candidates?.[0]?.content?.parts || []) {

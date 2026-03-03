@@ -518,9 +518,9 @@ const App: React.FC = () => {
               onChange={(e) => changeImageModel(e.target.value as ImageModel)}
               className="appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 py-2.5 pl-4 pr-10 rounded-full text-xs font-black transition-all uppercase tracking-tight focus:outline-none focus:ring-2 focus:ring-red-500/20"
             >
-              <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
-              <option value="gemini-2.5-flash-image">Nano Banana</option>
-              <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
+              <option value="gemini-3.1-flash-image-preview">⭐ Nano Banana 2 (유료)</option>
+              <option value="gemini-2.0-flash">🆓 무료 (2.0 Flash)</option>
+              <option value="gemini-3-pro-image-preview">👑 Nano Banana Pro (유료)</option>
             </select>
             <Cpu size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
