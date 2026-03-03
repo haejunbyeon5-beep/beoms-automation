@@ -29,7 +29,7 @@ import {
   Save,
   CheckCircle2
 } from 'lucide-react';
-import { Character, Scene, StylePreset, STYLE_PRESETS, AspectRatio, Language, SceneVariant, Theme, ImageQuality } from './types';
+import { Character, Scene, StylePreset, STYLE_PRESETS, AspectRatio, Language, SceneVariant, Theme, ImageModel } from './types';
 import CharacterCard from './components/CharacterCard';
 import StatusMonitor from './components/StatusMonitor';
 import SceneGallery from './components/SceneGallery';
@@ -145,7 +145,7 @@ const App: React.FC = () => {
   );
   
   // Persistence States
-  const [quality, setQuality] = useState<ImageQuality>('standard');
+  const [imageModel, setImageModel] = useState<ImageModel>('gemini-3.1-flash-image-preview');
   const [script, setScript] = useState('');
   const [targetSceneCount, setTargetSceneCount] = useState(5);
   const [isAutoSegment, setIsAutoSegment] = useState(true);
@@ -183,7 +183,7 @@ const App: React.FC = () => {
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData);
-        setQuality(parsed.quality || 'standard');
+        setImageModel(parsed.imageModel || 'gemini-3.1-flash-image-preview');
         setScript(parsed.script || '');
         setTargetSceneCount(parsed.targetSceneCount || 5);
         setIsAutoSegment(parsed.isAutoSegment ?? true);
@@ -207,7 +207,7 @@ const App: React.FC = () => {
     const timer = setTimeout(() => {
       try {
         const dataToSave = {
-          quality, script, targetSceneCount, isAutoSegment,
+          imageModel, script, targetSceneCount, isAutoSegment,
           stylePreset, aspectRatio, customStyle, styleRef, characters, scenes
         };
         localStorage.setItem(PERSISTENCE_KEY, JSON.stringify(dataToSave));
@@ -220,7 +220,7 @@ const App: React.FC = () => {
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [quality, script, targetSceneCount, isAutoSegment, stylePreset, aspectRatio, customStyle, styleRef, characters, scenes]);
+  }, [imageModel, script, targetSceneCount, isAutoSegment, stylePreset, aspectRatio, customStyle, styleRef, characters, scenes]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -263,8 +263,8 @@ const App: React.FC = () => {
     }
   };
 
-  const changeQuality = (newQuality: ImageQuality) => {
-    setQuality(newQuality);
+  const changeImageModel = (newModel: ImageModel) => {
+    setImageModel(newModel);
   };
 
   const t = TRANSLATIONS[lang];
@@ -297,7 +297,7 @@ const App: React.FC = () => {
     
     try {
       const imageUrl = await generateCharacterProfileImage(
-        targetChar.name, targetChar.description || "", stylePreset, customStyle, quality
+        targetChar.name, targetChar.description || "", stylePreset, customStyle, imageModel
       );
       setCharacters(prev => prev.map(c => 
         c.id === targetChar.id 
@@ -337,7 +337,7 @@ const App: React.FC = () => {
       const optimizedPrompt = await optimizePrompt(scene.description, stylePreset, customStyle, characters);
       if (stopRequestedRef.current) return;
       addLog(`[Scene ${scene.number}] ${lang === 'ko' ? '이미지 렌더링 중...' : 'Rendering image...'}`);
-      const imageUrl = await generateSceneImage(optimizedPrompt, characters, aspectRatio, styleRef || undefined, quality);
+      const imageUrl = await generateSceneImage(optimizedPrompt, characters, aspectRatio, styleRef || undefined, imageModel);
 
       if (imageUrl) {
         setScenes(prev => prev.map(s => {
@@ -441,7 +441,7 @@ const App: React.FC = () => {
           <p className="text-base text-slate-500 dark:text-slate-400 mb-8 leading-relaxed font-medium">{t.quotaErrorDesc}</p>
           <div className="flex flex-col gap-3">
             <button 
-              onClick={() => { setQuotaError(false); setQuality('standard'); }}
+              onClick={() => { setQuotaError(false); setImageModel('gemini-3.1-flash-image-preview'); }}
               className="w-full bg-slate-900 dark:bg-slate-700 text-white py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               {lang === 'ko' ? '표준 모드로 계속하기' : 'Continue in Standard Mode'}
@@ -512,13 +512,18 @@ const App: React.FC = () => {
             <Languages size={16} />{lang === 'en' ? 'KO' : 'EN'}
           </button>
 
-          <button 
-            onClick={() => changeQuality(quality === 'standard' ? 'pro' : 'standard')}
-            className={`flex items-center gap-2 px-4 py-2 border rounded-full text-xs font-black transition-all uppercase tracking-tight ${quality === 'pro' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'}`}
-          >
-            {quality === 'pro' ? <Trophy size={16} /> : <Cpu size={16} />}
-            {quality === 'pro' ? 'Ultra (Paid)' : 'Standard (Free)'}
-          </button>
+          <div className="relative">
+            <select 
+              value={imageModel}
+              onChange={(e) => changeImageModel(e.target.value as ImageModel)}
+              className="appearance-none bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 py-2.5 pl-4 pr-10 rounded-full text-xs font-black transition-all uppercase tracking-tight focus:outline-none focus:ring-2 focus:ring-red-500/20"
+            >
+              <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
+              <option value="gemini-2.5-flash-image">Nano Banana</option>
+              <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
+            </select>
+            <Cpu size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
 
           {/* API Key Button */}
           <button 
@@ -593,18 +598,7 @@ const App: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 text-slate-900 dark:text-white"><Settings2 size={24} className="text-red-500" /><h2 className="text-base font-black uppercase tracking-widest">{t.visualDirection}</h2></div>
               <div className="flex bg-slate-100 dark:bg-[#12121e] p-1 rounded-xl">
-                <button 
-                  onClick={() => changeQuality('standard')}
-                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'standard' ? 'bg-white dark:bg-slate-700 text-red-600 dark:text-red-400 shadow-sm' : 'text-slate-400'}`}
-                >
-                  Standard
-                </button>
-                <button 
-                  onClick={() => changeQuality('pro')}
-                  className={`px-5 py-2 rounded-lg text-xs font-black uppercase transition-all ${quality === 'pro' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-400'}`}
-                >
-                  Ultra (Pro)
-                </button>
+                {/* 퀄리티 버튼 대신 우측 상단 드롭다운 사용 */}
               </div>
             </div>
             

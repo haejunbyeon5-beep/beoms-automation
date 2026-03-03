@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Part, Type } from "@google/genai";
-import { Character, AspectRatio, ImageQuality, StylePreset, STYLE_PROMPT_MAP } from "../types";
+import { Character, AspectRatio, ImageModel, StylePreset, STYLE_PROMPT_MAP } from "../types";
 
 const API_KEY_STORAGE = 'gb_studio_api_key';
 
@@ -20,7 +20,7 @@ export const validateApiKey = async (key: string): Promise<boolean> => {
   try {
     const ai = new GoogleGenAI({ apiKey: key });
     await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3.1-flash-preview',
       contents: 'Hello',
       config: { maxOutputTokens: 10 }
     });
@@ -59,10 +59,10 @@ export const generateCharacterProfileImage = async (
   description: string, 
   stylePreset: StylePreset, 
   customStyle: string,
-  quality: ImageQuality = 'standard'
+  imageModel: ImageModel = 'gemini-3.1-flash-image-preview'
 ): Promise<string | undefined> => {
   const ai = getAI();
-  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const model = imageModel;
   const styleInstruction = getStyleInstruction(stylePreset);
   
   const prompt = `A professional high-quality character concept profile portrait of "${name}". 
@@ -105,7 +105,7 @@ export const autoSegmentScript = async (
   Output the result as a JSON array of objects with "number" and "description" keys.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.1-flash-preview',
     contents: `Script: ${fullScript}`,
     config: {
       systemInstruction,
@@ -160,7 +160,7 @@ export const optimizePrompt = async (
   Output ONLY the final English prompt, no explanations.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3.1-flash-preview',
     contents: `Transform this scene: ${sceneContent}`,
     config: {
       systemInstruction,
@@ -175,10 +175,10 @@ export const generateSceneImage = async (
   characters: Character[],
   aspectRatio: AspectRatio = "16:9",
   styleRef?: { data: string, mimeType: string },
-  quality: ImageQuality = 'standard'
+  imageModel: ImageModel = 'gemini-3.1-flash-image-preview'
 ): Promise<string | undefined> => {
   const ai = getAI();
-  const model = quality === 'pro' ? 'gemini-3-pro-image-preview' : 'gemini-2.5-flash-image';
+  const model = imageModel;
   const parts: Part[] = [];
 
   characters
@@ -211,7 +211,7 @@ export const generateSceneImage = async (
     config: {
       imageConfig: {
         aspectRatio: aspectRatio,
-        imageSize: quality === 'pro' ? "1K" : undefined
+        imageSize: imageModel === 'gemini-3-pro-image-preview' ? "1K" : undefined
       }
     }
   });

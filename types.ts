@@ -73,4 +73,4 @@ export const STYLE_PROMPT_MAP: Record<StylePreset, { positive: string; negative:
 export type AspectRatio = '16:9' | '4:3' | '1:1' | '9:16';
 export type Language = 'en' | 'ko';
 export type Theme = 'light' | 'dark';
-export type ImageQuality = 'standard' | 'pro';
+export type ImageModel = 'gemini-3.1-flash-image-preview' | 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
